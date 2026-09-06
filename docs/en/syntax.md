@@ -1,17 +1,17 @@
 Syntax
 ======
 
-Fenom implements [Smarty](http://www.smarty.net/) syntax with some improvements.
-All Fenom tags enclosed in the delimiters `{` and `}`, for example `{var $five = 5}`.
+pbFenom implements [Smarty](http://www.smarty.net/) syntax with some improvements.
+All pbFenom tags enclosed in the delimiters `{` and `}`, for example `{var $five = 5}`.
 If you wanna leave delimiters as is in the template use [special statements or tags](#ignoring-delimiters).
 
 **Note**
-Fenom implements [Smarty](http://www.smarty.net/) syntax but not implements Smarty tags, however, some tags very similar.
-But not so bad, Fenom has the [extras](https://github.com/bzick/fenom-extra) that make Fenom like Smarty.
+pbFenom implements [Smarty](http://www.smarty.net/) syntax but not implements Smarty tags, however, some tags very similar.
+But not so bad, pbFenom has the [extras](https://github.com/bzick/fenom-extra) that make pbFenom like Smarty.
 
 ## Variable
 
-Variables in Fenom can be either displayed directly or used as arguments for functions, attributes and modifiers,
+Variables in pbFenom can be either displayed directly or used as arguments for functions, attributes and modifiers,
 inside conditional expressions, etc.
 
 ### Use variables
@@ -46,9 +46,9 @@ Methods of objects defined in PHP can be invoked by specifying the method name a
 ```
 
 *Note*
-Be careful, Fenom do not checks existence of the method before invoke.
+Be careful, pbFenom do not checks existence of the method before invoke.
 To avoid the problem class of the object have to define method `__call`, which throws an exception, etc.
-Also you can prohibit method call in [settings](./docs/configuration.md).
+Also you can prohibit method call in [settings](./configuration.md).
 
 Below is complex example:
 
@@ -89,7 +89,7 @@ Unnamed system variable starts with `$.` and allows access to global system vari
 * `$.env` is `$_ENV`.
 * `$.tpl.name` returns current template name.
 * `$.tpl.schema` returns current schema of the template.
-* `$.version` returns version of the Fenom.
+* `$.version` returns version of the pbFenom.
 * `$.const` paste constant.
 
 ```smarty
@@ -117,7 +117,7 @@ A string literal can be specified in two different ways: double quotes (`"string
 
 #### Double quotes
 
-If the string is enclosed in double-quotes `"`, Fenom will interpret more escape sequences for special characters:
+If the string is enclosed in double-quotes `"`, pbFenom will interpret more escape sequences for special characters:
 
 
 | Последовательность  | Значение |
@@ -241,7 +241,7 @@ The special NULL value represents a variable with no value. NULL is the only pos
 
 ### Variable operations
 
-Fenom supports math, logic, comparison, containment, test, concatenation operators...
+pbFenom supports math, logic, comparison, containment, test, concatenation operators...
 
 todo
 
@@ -285,7 +285,7 @@ Set array
 {var $foo = [1, [$parent, $a->method()], 3]}
 ```
 
-See also [{var}](./tags/var.md) documentation.
+See also [{set}](./tags/set.md) documentation.
 
 
 ## Scalar values
@@ -349,7 +349,7 @@ Floating point numbers (also known as "floats", "doubles", or "real numbers") ca
 
 ### Operators
 
-Fenom supports operators on values:
+pbFenom supports operators on values:
 
 * Arithmetic operators — `+`, `-`, `*`, `/`, `%`
 * Logical operators — `||`, `&&`, `!$var`, `and`, `or`, `xor`
@@ -457,7 +457,7 @@ These parameters follow the modifier name and are separated by a : (colon).
 {var $foo="Ivan"|upper}    sets $foo value "USER"
 ```
 
-[List of modifiers](./main.md#modifiers)
+[List of modifiers](./readme.md#modifiers)
 
 ## Tags
 
@@ -467,12 +467,12 @@ These parameters follow the modifier name and are separated by a : (colon).
 
 It is sometimes desirable or even necessary to have ignore sections it would otherwise parse.
 A classic example is embedding Javascript or CSS code in a template.
-The problem arises as those languages use the `{` and `}` characters which are also the default delimiters for Fenom.
-Fenom has several solutions:
+The problem arises as those languages use the `{` and `}` characters which are also the default delimiters for pbFenom.
+pbFenom has several solutions:
 
 1. Uses block tag `{ignore} {/ignore}`. Anything within `{ignore} {/ignore}` tags is not interpreted, but displayed as-is.
 2. The `{` and `}` braces will be ignored so long as they are surrounded by white space.
-3. Uses tag option `:ignore` for block tag. Все Fenom теги внутри блока будут проигнорированны
+3. Uses tag option `:ignore` for block tag. Все pbFenom теги внутри блока будут проигнорированны
 
 Example:
 
@@ -543,7 +543,7 @@ Tags to allow any number of spaces
 |   strip |    s | block | enable `strip` option for a block of the template |
 |     raw |    a | any   | ignore escape option |
 |  escape |    e | any   | force escape |
-|  ignore |    i | block | ignore Fenom syntax |
+|  ignore |    i | block | ignore pbFenom syntax |
 
 ```smarty
 {script:ignore} ... {/script}

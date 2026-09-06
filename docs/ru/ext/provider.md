@@ -19,7 +19,7 @@ $fenom->addProvider("cms", $cmsProvider, '/path/to/cms/cache');
 
 Параметры:
 * `$scm` — имя схемы для обращения к шаблонам (например, `db:template.tpl`)
-* `$provider` — объект, реализующий `Fenom\ProviderInterface`
+* `$provider` — объект, реализующий `pbFenom\ProviderInterface`
 * `$compile_path` (опционально) — отдельная директория для скомпилированных шаблонов этого провайдера
 
 ## Использование шаблонов провайдера
@@ -36,10 +36,10 @@ $result = $fenom->fetch('cms:article.tpl', $vars);
 
 ## Создание своего провайдера
 
-Создайте класс, реализующий `Fenom\ProviderInterface`:
+Создайте класс, реализующий `pbFenom\ProviderInterface`:
 
 ```php
-use Fenom\ProviderInterface;
+use pbFenom\ProviderInterface;
 
 class DatabaseProvider implements ProviderInterface {
     private $pdo;

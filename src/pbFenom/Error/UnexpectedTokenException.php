@@ -1,6 +1,7 @@
 <?php
+declare(strict_types=1);
 /*
- * This file is part of Fenom.
+ * This file is part of pbFenom.
  *
  * (c) 2013 Ivan Shalganov
  *
@@ -8,9 +9,9 @@
  * file that was distributed with this source code.
  */
 
-namespace Fenom\Error;
+namespace pbFenom\Error;
 
-use Fenom\Tokenizer;
+use pbFenom\Tokenizer;
 
 /**
  * Unexpected token

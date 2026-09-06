@@ -1,7 +1,7 @@
 Documentation
 =============
 
-### Fenom
+### pbFenom
 
 * [Quick start](./start.md)
 * [Usage](./start.md#install-fenom)
@@ -33,7 +33,7 @@ Documentation
 * [extends](./tags/extends.md), [use](./tags/extends.md#use),
   [block](./tags/extends.md#block), [parent](./tags/extends.md#parent) and [paste](./tags/extends.md#paste) — template inheritance
 * [filter](./tags/filter.md) — apply modifier on a block of template data
-* [ignore](./tags/ignore.md) — ignore Fenom syntax
+* [ignore](./tags/ignore.md) — ignore pbFenom syntax
 * [macro](./tags/macro.md) and [import](./tags/macro.md#import) — template functions
 * [autoescape](./tags/autoescape.md) — escape template fragment
 * [raw](./tags/raw.md) — unescape template fragment
@@ -90,5 +90,5 @@ Deprecated tags
 
 ### Extends
 
-* [Extend Fenom](./ext/extend.md)
+* [Extend pbFenom](./ext/extend.md)
 * [Add-ons](./ext/extensions.md)

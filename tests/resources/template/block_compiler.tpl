@@ -1,0 +1,1 @@
+{SayBlock} and {SaySomething}. It is all, {/SayBlock}

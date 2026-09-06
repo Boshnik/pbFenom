@@ -1,4 +1,4 @@
-Расширение Fenom
+Расширение pbFenom
 ================
 
 # Добавление тегов
@@ -10,40 +10,70 @@
 
 ## Линейные функции
 
-Примитивное добавление функции можно осуществить следующим образом:
-
 ```php
-$fenom->addFunction(string $function_name, callable $callback[, callable $parser]);
+$fenom->addFunction(string $name, callable $callback [, callable $parser]);
 ```
 
-В данном случае запускается стандартный парсер, который автоматически разберет аргументы тега, которые должны быть в формате HTML атрибутов и отдаст их в функцию ассоциативным массивом:
-```php
-$fenom->addFunction("some_function", function (array $params) { /* ... */ });
-```
-При необходимости можно переопределить парсер на произвольный:
-```php
-$fenom->addFunction("some_function", $some_function, function (Fenom\Tokenizer $tokenizer, Fenom\Template $template) { /* parse tag */});
-```
-Существует более простой способ добавления произвольной функции:
+По умолчанию аргументы тега раскладываются на **сигнатуру самого колбэка** через
+рефлексию: именованные — по имени, остальные — по позиции.
 
 ```php
-$fenom->addFunctionSmart(string $function_name, callable $callback);
+$fenom->addFunction('greet', function (string $name, string $greeting = 'Привет'): string {
+    return "$greeting, $name!";
+});
 ```
-
-В данном случае парсер сканирует список аргументов коллбека и попробует сопоставить с аргументами тега.
-
-```php
-// ... class XYCalcs ..
-public static function calc($x, $y = 5) { /* ... */}
-// ...
-$fenom->addFunctionSmart('calc', 'XYCalcs::calc');
-```
-пример выше позволяет объявить тег `{calc}` и спользовать его:
 ```smarty
-{calc x=$top y=50} или {calc y=50 x=$top} вызовет XYCalcs::calc($top, 50)
-{calc x=$top} или {calc $top} вызовет XYCalcs::calc($top)
+{greet name="Мир"}                       {* Привет, Мир! *}
+{greet name="Мир" greeting="Здравствуй"} {* Здравствуй, Мир! *}
+{greet "Мир"}                            {* позиционно *}
 ```
-Таким образом вы успешно можете добавлять Ваши функции или методы.
+
+Имена параметров становятся частью API шаблона: переименование параметра ломает
+шаблоны. Пропущенный обязательный аргумент сообщается на этапе компиляции.
+
+`addFunctionSmart()` — синоним; оставлен потому, что до 1.1.0 это был единственный
+способ получить такое поведение.
+
+### Сырая форма
+
+Чтобы получить аргументы массивом, попросите об этом явно:
+
+```php
+$fenom->addFunction('some_function', function (array $params, pbFenom\Render $tpl) {
+    /* ... */
+}, pbFenom::RAW_FUNC_PARSER);
+```
+
+До 1.1.0 это было поведением по умолчанию — именно поэтому написать функцию было
+сложнее, чем модификатор.
+
+### Один колбэк, обе формы вызова
+
+Зарегистрируйте его дважды под одним именем:
+
+```php
+$excerpt = fn(string $text, int $words = 10): string => /* ... */;
+$fenom->addModifier('excerpt', $excerpt);
+$fenom->addFunction('excerpt', $excerpt);
+```
+```smarty
+{$post.body|excerpt:20}
+{excerpt text=$post.body words=20}
+```
+
+Два вызова вместо одного помощника — намеренно: второй занимает имя **тега**, а имена
+тегов конфликтуют. `escape` и `strip` являются одновременно встроенным модификатором и
+встроенным блочным тегом, поэтому один вызов, делающий и то и другое молча, мог бы
+перезаписать `{strip}...{/strip}`.
+
+### Собственный парсер
+
+```php
+$fenom->addFunction('some_function', $callback,
+    function (pbFenom\Tokenizer $tokenizer, pbFenom\Tag $tag) {
+        /* вернуть PHP-код тега */
+    });
+```
 
 ## Блоковые функции
 
@@ -66,7 +96,7 @@ $fenom->addBlockFunction('some_block_function', function (array $params, $conten
 $fenom->addCompiler(string $compiler, callable $parser);
 ```
 
-Парсер должен принимать `Fenom\Tokenizer $tokenizer`, `Fenom\Template $template` и возвращать PHP код.
+Парсер должен принимать `pbFenom\Tokenizer $tokenizer`, `pbFenom\Template $template` и возвращать PHP код.
 Компилятор так же можно импортировать из класса автоматически
 
 ```php
@@ -122,37 +152,37 @@ $fenom->addTest(string $name, string $code);
 
 # Расширение глобальной переменной
 
-Fenom обладает определенным [набором глобальных переменных](../syntax.md#Системная-переменная).
+pbFenom обладает определенным [набором глобальных переменных](../syntax.md#Системная-переменная).
 Однако их может не хватать для удобной работы и в этом случае потребуется добавить свои или переопределить/удалить существующие.
-Метод `Fenom::addAccessor(string $name, callable $parser)` позволяет добавить свой обработчик-парсер `$parser`,
+Метод `pbFenom::addAccessor(string $name, callable $parser)` позволяет добавить свой обработчик-парсер `$parser`,
 который будет вызван при встрече с глобальной переменной `$name` **во время компиляции шаблона**.
 
 ```php
-$fenom->addAccessor('project', function (Fenom\Tokenizer $tokens) { /* code */ }); 
+$fenom->addAccessor('project', function (pbFenom\Tokenizer $tokens) { /* code */ }); 
 ```
 
 Указанный вторым аргументом, парсер будет вызван при встречи компилятором конструкции `$.project`.
 Парсер сам должен разобрать все токены из набора токенов `$tokens` до того момента пока не посчитает что ему их хватит для
 интерпретации. Возвращает парсер PHP код, который должен представлять значение восле выполенения, то есть его можно втавить в `if()`.
 
-Через метод `Fenom::addAccessor($name, $parser)` можно переопределить уже любую другую существующую глобальную переменную.
-Метод `Fenom::removeAccessor($name)` позволяет удалить любую определенную глобальную переменную или функцию по ее имени.
+Через метод `pbFenom::addAccessor($name, $parser)` можно переопределить уже любую другую существующую глобальную переменную.
+Метод `pbFenom::removeAccessor($name)` позволяет удалить любую определенную глобальную переменную или функцию по ее имени.
 
 ## Готовые решения
 
-Орпеделить парсер для глобальной переменной весьма трудозатратно и требует полного понимания как работают парсеры в Fenom.
+Орпеделить парсер для глобальной переменной весьма трудозатратно и требует полного понимания как работают парсеры в pbFenom.
 Это не удобно. Поэтому есть несколько предзаготовленных (умных) парсеров, которые берут рутину на себя, а пользователю остается указать ключевые параметры.
 
-Умные парсеты добавляются через метод `Fenom::addAccessorSmart(string $name, string $accessor, string $parser)`,
+Умные парсеты добавляются через метод `pbFenom::addAccessorSmart(string $name, string $accessor, string $parser)`,
 где `$name` имя глобальной переменной, `$accessor` — параметр к парсеру, `$parser` — предопределенный парсер.
 
 ### Доступ к свойству
 
-Парсер `Fenom::ACCESSOR_PROPERTY` позволит обратится к указанному свойству шаблонизатора из шаблона.
+Парсер `pbFenom::ACCESSOR_PROPERTY` позволит обратится к указанному свойству шаблонизатора из шаблона.
 Параметр `$accessor` выступает как **имя свойства**:
 
 ```php
-    $fenom->addAccessorSmart("site", "data", Fenom::ACCESSOR_PROPERTY);
+    $fenom->addAccessorSmart("site", "data", pbFenom::ACCESSOR_PROPERTY);
     $fenom->data = [
         "domain" => 'example.ru',
         "support" => 'support@example.ru'
@@ -167,10 +197,10 @@ $fenom->addAccessor('project', function (Fenom\Tokenizer $tokens) { /* code */ }
 
 ### Доступ к методу
 
-Парсер `Fenom::ACCESSOR_METHOD` позволит обратится к указанному методу шаблонизатора из шаблона.
+Парсер `pbFenom::ACCESSOR_METHOD` позволит обратится к указанному методу шаблонизатора из шаблона.
 Параметр `$accessor` выступает как **имя метода**:
 ```php
-    $fenom->addAccessorSmart("fetch", "fetch", Fenom::ACCESSOR_METHOD);
+    $fenom->addAccessorSmart("fetch", "fetch", pbFenom::ACCESSOR_METHOD);
 ```
 В шаблоне появится глобальная функция `$.fetch`:
 ```smarty
@@ -180,10 +210,10 @@ $fenom->addAccessor('project', function (Fenom\Tokenizer $tokens) { /* code */ }
 
 ### Доступ к значению
 
-Парсер `Fenom::ACCESSOR_VAR` позволит обратится к указанному значению из шаблона.
+Парсер `pbFenom::ACCESSOR_VAR` позволит обратится к указанному значению из шаблона.
 Параметр `$accessor` выступает как **PHP выражение**, описывающее значение:
 ```php
-    $fenom->addAccessorSmart("storage", "App::getInstance()->storage", Fenom::ACCESSOR_VAR);
+    $fenom->addAccessorSmart("storage", "App::getInstance()->storage", pbFenom::ACCESSOR_VAR);
 ```
 В шаблоне появится глобальная переменная `$.storage`:
 ```smarty
@@ -192,10 +222,10 @@ $fenom->addAccessor('project', function (Fenom\Tokenizer $tokens) { /* code */ }
 
 ### Доступ к callable
 
-Парсер `Fenom::ACCESSOR_CALL` позволит вызвать указанную финкцию или метод из шаблона.
+Парсер `pbFenom::ACCESSOR_CALL` позволит вызвать указанную финкцию или метод из шаблона.
 Параметр `$accessor` выступает как **PHP выражение**, описывающее название функции или метод:
 ```php
-    $fenom->addAccessorSmart("di", "App::getInstance()->di->get", Fenom::ACCESSOR_CALL);
+    $fenom->addAccessorSmart("di", "App::getInstance()->di->get", pbFenom::ACCESSOR_CALL);
 ```
 `App::getInstance()->di->get` доллжно быть callable, то есть
 ```php
@@ -211,10 +241,10 @@ is_callable([App::getInstance()->di, "get"]) === true;
 
 Шаблоны можно получать из самых разных источников.
 Когда вы отображаете или вызываете шаблон, либо когда вы подключаете один шаблон к другому, вы указываете источник,
-вместе с соответствующим путём и названием шаблона. Если источник явно не задан, то используется источник `Fenom\Provider`,
+вместе с соответствующим путём и названием шаблона. Если источник явно не задан, то используется источник `pbFenom\Provider`,
 который считывает шаблоны из указанной директории.
 
-Источник шаблонов должен реализовать интерфейс `Fenom\ProviderInterface`.
+Источник шаблонов должен реализовать интерфейс `pbFenom\ProviderInterface`.
 Используйте метод `$fenom->setProvider(...)`  что бы добавить источник в шаблонизатор, указав название источника и, если есть необходимость,
 задать директорию кеша для шаблонов из этого источника. Рассмотрим на примере, реализуем источник шаблонов из базы данных.
 
@@ -222,7 +252,7 @@ is_callable([App::getInstance()->di, "get"]) === true;
 
 ```php
 
-class DbProvider implements Fenom\ProviderInterface {
+class DbProvider implements pbFenom\ProviderInterface {
     // ...
 }
 
@@ -248,7 +278,7 @@ $fenom->display("db:index.tpl", $vars);
 
 # Расширение кеша (эксперементальное)
 
-Изначально Fenom не рассчитывался на то что кеш скомпиленых шаблонов может располагаться не на файловой системе.
+Изначально pbFenom не рассчитывался на то что кеш скомпиленых шаблонов может располагаться не на файловой системе.
 Однако, в теории, есть возможность реализовать свое кеширование для скомпиленых шаблонов без переопределения шаблонизатора.
 Речь идет о своем протоколе, отличным от `file://`, который [можно определить](http://php.net/manual/en/class.streamwrapper.php) в PHP.
 

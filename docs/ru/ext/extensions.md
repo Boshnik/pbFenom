@@ -1,7 +1,7 @@
 Extensions
 ==========
 
-* [Extra pack](https://github.com/bzick/fenom-extra) of add-ons for Fenom template engine.
+* [Extra pack](https://github.com/bzick/fenom-extra) of add-ons for pbFenom template engine.
     * Tools for static files (css, js).
     * Global variables
     * Allow more hooks for extending

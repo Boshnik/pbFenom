@@ -1,5 +1,5 @@
 <?php
-namespace Fenom;
+namespace pbFenom;
 
 class FunctionsTest extends TestCase
 {

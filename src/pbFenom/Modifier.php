@@ -1,13 +1,14 @@
 <?php
+declare(strict_types=1);
 /*
- * This file is part of Fenom.
+ * This file is part of pbFenom.
  *
  * (c) 2013 Ivan Shalganov
  *
  * For the full copyright and license information, please view the license.md
  * file that was distributed with this source code.
  */
-namespace Fenom;
+namespace pbFenom;
 
 /**
  * Collection of modifiers
@@ -25,11 +26,14 @@ class Modifier
      */
     public static function dateFormat(mixed $date, string $format = "%b %e, %Y"): string
     {
-        if (!is_numeric($date)) {
+        if (is_numeric($date)) {
+            // a numeric *string* satisfies is_numeric() but date() wants an int
+            $date = (int)$date;
+        } else {
             if ($date instanceof \DateTime) {
                 $date = $date->getTimestamp();
             } else {
-                $date = strtotime($date);
+                $date = strtotime((string)$date);
             }
             if (!$date) {
                 $date = time();
@@ -83,7 +87,9 @@ class Modifier
      */
     public static function date(string $date, string $format = "Y m d"): string
     {
-        if (!is_numeric($date)) {
+        if (is_numeric($date)) {
+            $date = (int)$date;
+        } else {
             $date = strtotime($date);
             if (!$date) {
                 $date = time();
@@ -93,24 +99,48 @@ class Modifier
     }
 
     /**
+     * Flags used for every HTML escape, here and in the compiled templates.
+     * ENT_QUOTES is required: ENT_COMPAT leaves `'` untouched, which is injectable
+     * in single-quoted and unquoted attributes. ENT_SUBSTITUTE keeps malformed
+     * UTF-8 from silently collapsing the whole value to an empty string.
+     */
+    const HTML_ESCAPE_FLAGS = ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5;
+
+    /**
      * Escape string
      *
      * @param string $text
-     * @param string $type
+     * @param string $type one of: html, attr, js, url, query
      * @param string|null $charset
      * @return string
+     * @throws \InvalidArgumentException on an unknown strategy
      */
     public static function escape(string $text, string $type = 'html', ?string $charset = null): string
     {
         switch (strtolower($type)) {
             case "url":
+                // RFC 3986: safe for path segments. Use 'query' for form-encoded values.
+                return rawurlencode($text);
+            case "query":
                 return urlencode($text);
-            case "html";
-                return htmlspecialchars($text, ENT_COMPAT, $charset ?: \Fenom::$charset);
+            case "html":
+            case "attr": // safe for quoted attributes; unquoted attributes are not supported
+                return htmlspecialchars($text, self::HTML_ESCAPE_FLAGS, $charset ?: \pbFenom::$charset);
             case "js":
-                return json_encode($text, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+                // Returns a complete JS literal, quotes included: `var a = {$x|escape:'js'}`.
+                // The HEX flags are what stop `</script>` from closing the element.
+                $encoded = json_encode(
+                    $text,
+                    JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+                    | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE
+                );
+                return $encoded === false ? '""' : $encoded;
             default:
-                return $text;
+                // Never fall through silently: returning $text unescaped is how
+                // {$x|escape:'attr'} used to produce zero escaping with no error.
+                throw new \InvalidArgumentException(
+                    "Unknown escape strategy '$type', expected one of: html, attr, js, url, query"
+                );
         }
     }
 
@@ -125,11 +155,17 @@ class Modifier
     {
         switch (strtolower($type)) {
             case "url":
+                return rawurldecode($text);
+            case "query":
                 return urldecode($text);
-            case "html";
-                return htmlspecialchars_decode($text);
+            case "html":
+            case "attr":
+                // must mirror escape()'s flags, otherwise &#039; survives a round-trip
+                return htmlspecialchars_decode($text, self::HTML_ESCAPE_FLAGS);
             default:
-                return $text;
+                throw new \InvalidArgumentException(
+                    "Unknown unescape strategy '$type', expected one of: html, attr, url, query"
+                );
         }
     }
 
@@ -194,7 +230,8 @@ class Modifier
     public static function length(mixed $item): int
     {
         if (is_string($item)) {
-            return strlen(preg_replace('#[\x00-\x7F]|[\x80-\xDF][\x00-\xBF]|[\xE0-\xEF][\x00-\xBF]{2}#s', ' ', $item));
+            // the hand-rolled counter had no case for 4-byte sequences, so an emoji counted as 3
+            return mb_strlen($item, \pbFenom::$charset);
         } elseif (is_array($item)) {
             return count($item);
         } elseif ($item instanceof \Countable) {
@@ -236,7 +273,7 @@ class Modifier
      * @param string $value The string being searched and replaced on, otherwise known as the haystack.
      * @param string $search The value being searched for, otherwise known as the needle.
      * @param string $replace The replacement value that replaces found search
-     * @return mixed
+     * @return string
      */
     public static function replace(string $value, string $search, string $replace): string
     {
@@ -247,7 +284,7 @@ class Modifier
      * @param string $value
      * @param string $pattern
      * @param string $replacement
-     * @return mixed
+     * @return string
      */
     public static function ereplace(string $value, string $pattern, string $replacement): string
     {

@@ -1,8 +1,8 @@
 <?php
-namespace Fenom;
+namespace pbFenom;
 
-use Fenom,
-    Fenom\Render;
+use pbFenom,
+    pbFenom\Render;
 
 class RenderTest extends TestCase
 {
@@ -14,7 +14,7 @@ class RenderTest extends TestCase
 
     public static function setUpBeforeClass(): void
     {
-        self::$render = new Render(Fenom::factory("."), function ($tpl) {
+        self::$render = new Render(pbFenom::factory(".", FENOM_RESOURCES . "/compile"), function ($tpl) {
             echo "It is render's function " . $tpl["render"];
         }, array(
             "name" => "render.tpl"
@@ -23,7 +23,7 @@ class RenderTest extends TestCase
 
     public function testCreate()
     {
-        $r = new Render(Fenom::factory("."), function () {
+        $r = new Render(pbFenom::factory(".", FENOM_RESOURCES . "/compile"), function () {
             echo "Test render";
         }, array(
             "name" => "test.render.tpl"
@@ -46,8 +46,8 @@ class RenderTest extends TestCase
 
     public function testFetchException()
     {
-        $this->expectException(Fenom\Error\TemplateException::class);
-        $render = new Render(Fenom::factory("."), function () {
+        $this->expectException(pbFenom\Error\TemplateException::class);
+        $render = new Render(pbFenom::factory(".", FENOM_RESOURCES . "/compile"), function () {
             echo "error";
             throw new \RuntimeException("template error");
         }, array(

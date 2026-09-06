@@ -1,6 +1,7 @@
 <?php
+declare(strict_types=1);
 /*
- * This file is part of Fenom.
+ * This file is part of pbFenom.
  *
  * (c) 2013 Ivan Shalganov
  *
@@ -8,11 +9,11 @@
  * file that was distributed with this source code.
  */
 
-namespace Fenom\Error;
+namespace pbFenom\Error;
 
 /**
- * @package Fenom\Error
+ * @package pbFenom\Error
  */
-class SecurityException extends CompileException
+class InvalidUsageException extends \LogicException
 {
 }

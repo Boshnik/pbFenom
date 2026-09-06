@@ -1,20 +1,20 @@
 <?php
 
-class FenomTest extends \Fenom\TestCase
+class FenomTest extends \pbFenom\TestCase
 {
 
     public static function providerOptions()
     {
         return array(
-            array("disable_methods", Fenom::DENY_METHODS),
-            array("disable_native_funcs", Fenom::DENY_NATIVE_FUNCS),
-            array("disable_cache", Fenom::DISABLE_CACHE),
-            array("force_compile", Fenom::FORCE_COMPILE),
-            array("auto_reload", Fenom::AUTO_RELOAD),
-            array("force_include", Fenom::FORCE_INCLUDE),
-            array("auto_escape", Fenom::AUTO_ESCAPE),
-            array("force_verify", Fenom::FORCE_VERIFY),
-            array("strip", Fenom::AUTO_STRIP),
+            array("disable_methods", pbFenom::DENY_METHODS),
+            array("disable_native_funcs", pbFenom::DENY_NATIVE_FUNCS),
+            array("disable_cache", pbFenom::DISABLE_CACHE),
+            array("force_compile", pbFenom::FORCE_COMPILE),
+            array("auto_reload", pbFenom::AUTO_RELOAD),
+            array("force_include", pbFenom::FORCE_INCLUDE),
+            array("auto_escape", pbFenom::AUTO_ESCAPE),
+            array("force_verify", pbFenom::FORCE_VERIFY),
+            array("strip", pbFenom::AUTO_STRIP),
         );
     }
 
@@ -22,9 +22,9 @@ class FenomTest extends \Fenom\TestCase
     public function testCreating()
     {
         $time  = $this->tpl('temp.tpl', 'Template 1 a');
-        $fenom = new Fenom($provider = new \Fenom\Provider(FENOM_RESOURCES . '/template'));
+        $fenom = new pbFenom($provider = new \pbFenom\Provider(FENOM_RESOURCES . '/template'));
         $fenom->setCompileDir(FENOM_RESOURCES . '/compile');
-        $this->assertInstanceOf('Fenom\Render', $tpl = $fenom->getTemplate('temp.tpl'));
+        $this->assertInstanceOf('pbFenom\Render', $tpl = $fenom->getTemplate('temp.tpl'));
         $this->assertSame($provider, $tpl->getProvider());
         $this->assertSame('temp.tpl', $tpl->getBaseName());
         $this->assertSame('temp.tpl', $tpl->getName());
@@ -35,12 +35,12 @@ class FenomTest extends \Fenom\TestCase
     public function testFactory()
     {
         $time  = $this->tpl('temp.tpl', 'Template 1 a');
-        $fenom = Fenom::factory(
-            $provider = new \Fenom\Provider(FENOM_RESOURCES . '/template'),
+        $fenom = pbFenom::factory(
+            $provider = new \pbFenom\Provider(FENOM_RESOURCES . '/template'),
             FENOM_RESOURCES . '/compile',
-            Fenom::AUTO_ESCAPE
+            pbFenom::AUTO_ESCAPE
         );
-        $this->assertInstanceOf('Fenom\Render', $tpl = $fenom->getTemplate('temp.tpl'));
+        $this->assertInstanceOf('pbFenom\Render', $tpl = $fenom->getTemplate('temp.tpl'));
         $this->assertSame($provider, $tpl->getProvider());
         $this->assertSame('temp.tpl', $tpl->getBaseName());
         $this->assertSame('temp.tpl', $tpl->getName());
@@ -51,7 +51,7 @@ class FenomTest extends \Fenom\TestCase
     public function testFactoryInvalid()
     {
         $this->expectException(LogicException::class, "Cache directory /invalid/path is not writable");
-        Fenom::factory(FENOM_RESOURCES . '/template', '/invalid/path');
+        pbFenom::factory(FENOM_RESOURCES . '/template', '/invalid/path');
     }
 
     public function testCompileFile()
@@ -64,8 +64,8 @@ class FenomTest extends \Fenom\TestCase
         $this->tpl('template2.tpl', 'Template 2 b');
         $this->assertSame("Template 1 a", $this->fenom->fetch('template1.tpl', $a));
         $this->assertSame("Template 2 b", $this->fenom->fetch('template2.tpl', $a));
-        $this->assertInstanceOf('Fenom\Render', $this->fenom->getTemplate('template1.tpl'));
-        $this->assertInstanceOf('Fenom\Render', $this->fenom->getTemplate('template2.tpl'));
+        $this->assertInstanceOf('pbFenom\Render', $this->fenom->getTemplate('template1.tpl'));
+        $this->assertInstanceOf('pbFenom\Render', $this->fenom->getTemplate('template2.tpl'));
         $this->assertSame(3, iterator_count(new FilesystemIterator(FENOM_RESOURCES . '/compile')));
     }
 
@@ -82,7 +82,7 @@ class FenomTest extends \Fenom\TestCase
      */
     public function testCheckMTime()
     {
-        $this->fenom->setOptions(Fenom::FORCE_COMPILE);
+        $this->fenom->setOptions(pbFenom::FORCE_COMPILE);
         $this->fenom->getProvider()->setClearCachedStats();
         $this->tpl('custom.tpl', 'Custom template');
         $this->assertSame("Custom template", $this->fenom->fetch('custom.tpl', array()));
@@ -96,7 +96,7 @@ class FenomTest extends \Fenom\TestCase
 
     public function testForceCompile()
     {
-        $this->fenom->setOptions(Fenom::FORCE_COMPILE);
+        $this->fenom->setOptions(pbFenom::FORCE_COMPILE);
         $this->tpl('custom.tpl', 'Custom template');
         $this->assertSame("Custom template", $this->fenom->fetch('custom.tpl', array()));
         $this->tpl('custom.tpl', 'Custom template (new)');
@@ -154,18 +154,19 @@ class FenomTest extends \Fenom\TestCase
     public function testSetFunctions()
     {
         $test = $this;
-        $this->fenom->setOptions(Fenom::FORCE_COMPILE);
-        $this->fenom->addFunction("myfunc", "myFunc");
+        $this->fenom->setOptions(pbFenom::FORCE_COMPILE);
+        // these two exercise the raw ($params, $tpl) form, which is now opt-in
+        $this->fenom->addFunction("myfunc", "myFunc", pbFenom::RAW_FUNC_PARSER);
         $this->fenom->addFunction("myfunc2", function ($args, $tpl) use ($test) {
-            $test->assertInstanceOf('Fenom\Render', $tpl);
+            $test->assertInstanceOf('pbFenom\Render', $tpl);
             $test->assertSame(array(
                 "name" => "foo"
             ), $args);
             return "MyFunc2:".$args['name'];
-        });
+        }, pbFenom::RAW_FUNC_PARSER);
         $this->fenom->addBlockFunction("myblockfunc", "myBlockFunc");
         $this->fenom->addBlockFunction("myblockfunc2", function ($args, $content, $tpl) use ($test) {
-            $test->assertInstanceOf('Fenom\Render', $tpl);
+            $test->assertInstanceOf('pbFenom\Render', $tpl);
             $test->assertSame(array(
                     "name" => "foo"
                 ), $args);
@@ -184,7 +185,7 @@ class FenomTest extends \Fenom\TestCase
 
     public function testSetCompilers()
     {
-        $this->fenom->setOptions(Fenom::FORCE_COMPILE);
+        $this->fenom->setOptions(pbFenom::FORCE_COMPILE);
         $this->fenom->addCompiler("mycompiler", 'myCompiler');
         $this->fenom->addBlockCompiler(
             "myblockcompiler",
@@ -230,21 +231,21 @@ class FenomTest extends \Fenom\TestCase
         $punit = $this;
         $this->fenom->addPreFilter(
             function ($tpl, $src) use ($punit) {
-                $punit->assertInstanceOf('Fenom\Template', $tpl);
+                $punit->assertInstanceOf('pbFenom\Template', $tpl);
                 return "== $src ==";
             }
         );
 
         $this->fenom->addPostFilter(
             function ($tpl, $code) use ($punit) {
-                $punit->assertInstanceOf('Fenom\Template', $tpl);
+                $punit->assertInstanceOf('pbFenom\Template', $tpl);
                 return "+++ $code +++";
             }
         );
 
         $this->fenom->addFilter(
             function ($tpl, $text) use ($punit) {
-                $punit->assertInstanceOf('Fenom\Template', $tpl);
+                $punit->assertInstanceOf('pbFenom\Template', $tpl);
                 return "|--- $text ---|";
             }
         );
@@ -268,7 +269,7 @@ class FenomTest extends \Fenom\TestCase
         $punit = $this;
         $this->fenom->addTagFilter(
             function ($text, $tpl) use (&$tags, $punit) {
-                $punit->assertInstanceOf('Fenom\Template', $tpl);
+                $punit->assertInstanceOf('pbFenom\Template', $tpl);
                 $tags[] = $text;
                 return $text;
             }
@@ -298,7 +299,7 @@ class FenomTest extends \Fenom\TestCase
 
     public function testAddAllowedFunctions()
     {
-        $this->fenom->setOptions(Fenom::DENY_NATIVE_FUNCS);
+        $this->fenom->setOptions(pbFenom::DENY_NATIVE_FUNCS);
         $this->assertFalse($this->fenom->isAllowedFunction('substr'));
         $this->fenom->addAllowedFunctions(array('substr'));
         $this->assertTrue($this->fenom->isAllowedFunction('substr'));
@@ -341,7 +342,7 @@ class FenomTest extends \Fenom\TestCase
      * @group strip
      */
     public function testStrip() {
-        $this->fenom->setOptions(Fenom::AUTO_STRIP);
+        $this->fenom->setOptions(pbFenom::AUTO_STRIP);
         $tpl = <<<TPL
 <div class="item   item-one">
     <a href="/item/{\$one}">number  {\$num.1}</a>
@@ -355,7 +356,7 @@ TPL;
      * @group strip-xml
      */
     public function testStripXML() {
-        $this->fenom->setOptions(Fenom::AUTO_STRIP);
+        $this->fenom->setOptions(pbFenom::AUTO_STRIP);
         $tpl = <<<TPL
 <?xml version="1.0"?>
 TPL;

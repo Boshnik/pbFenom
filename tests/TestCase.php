@@ -1,9 +1,9 @@
 <?php
-namespace Fenom;
+namespace pbFenom;
 
-use Fenom, Fenom\Provider as FS;
+use pbFenom, pbFenom\Provider as FS;
 
-class CustomFenom extends Fenom {
+class CustomFenom extends pbFenom {
     public mixed $prop;
 }
 
@@ -91,9 +91,9 @@ class TestCase extends \PHPUnit\Framework\TestCase
     }
 
 
-    public static function inlineFunction($params)
+    public static function inlineFunction(string $text = "")
     {
-        return $params["text"] ?? "";
+        return $text;
     }
 
     public static function blockFunction($params, $text)
@@ -134,7 +134,7 @@ class TestCase extends \PHPUnit\Framework\TestCase
      * @param string $result expected result.
      * @param int $options
      * @param bool $dump dump source and result code (for debug)
-     * @return \Fenom\Template
+     * @return \pbFenom\Template
      */
     public function exec($code, $vars, $result, $options = 0, $dump = false)
     {
@@ -164,7 +164,7 @@ class TestCase extends \PHPUnit\Framework\TestCase
      * @param string $code source of the template
      * @param string $exception exception class
      * @param string $message exception message
-     * @param int $options Fenom's options
+     * @param int $options pbFenom's options
      */
     public function execError($code, $exception, $message, $options = 0)
     {

@@ -2,7 +2,7 @@ Modifier date_format
 ====================
 
 This formats a date and time into the given [strftime()](http://docs.php.net/strftime) format.
-Dates can be passed to Fenom as unix timestamps, DateTime objects or any string made up of month day year, parsable by [strftime()](http://docs.php.net/strftime).
+Dates can be passed to pbFenom as unix timestamps, DateTime objects or any string made up of month day year, parsable by [strftime()](http://docs.php.net/strftime).
 By default format is: `%b %e, %Y`.
 
 ```smarty

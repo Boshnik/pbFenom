@@ -1,13 +1,14 @@
 <?php
+declare(strict_types=1);
 /*
- * This file is part of Fenom.
+ * This file is part of pbFenom.
  *
  * (c) 2013 Ivan Shalganov
  *
  * For the full copyright and license information, please view the license.md
  * file that was distributed with this source code.
  */
-namespace Fenom;
+namespace pbFenom;
 
 
 class Tag extends \ArrayObject
@@ -17,8 +18,6 @@ class Tag extends \ArrayObject
     const BLOCK    = 4;
 
 
-    const LTRIM = 1;
-    const RTRIM = 2;
 
     /**
      * @var Template
@@ -33,7 +32,8 @@ class Tag extends \ArrayObject
 
     private int $_offset = 0;
     private bool $_closed = true;
-    private string $_body;
+    /** @var string[] chunks of the template's body, shared by reference with Template */
+    private array $_body;
     private int $_type = 0;
     private mixed $_open;
     private mixed $_close;
@@ -46,9 +46,9 @@ class Tag extends \ArrayObject
      * @param string $name the tag name
      * @param Template $tpl current template
      * @param array $info tag's information
-     * @param string $body template's code
+     * @param string[] $body template's code, as a list of chunks
      */
-    public function __construct(string $name, Template $tpl, array $info, string &$body)
+    public function __construct(string $name, Template $tpl, array $info, array &$body)
     {
         parent::__construct();
         $this->tpl     = $tpl;
@@ -56,9 +56,9 @@ class Tag extends \ArrayObject
         $this->line    = $tpl->getLine();
         $this->level   = $tpl->getStackSize();
         $this->_body   = & $body;
-        $this->_offset = strlen($body);
+        $this->_offset = count($body);
         $this->_type   = $info["type"];
-        $this->escape  = $tpl->getOptions() & \Fenom::AUTO_ESCAPE;
+        $this->escape  = (bool)($tpl->getOptions() & \pbFenom::AUTO_ESCAPE);
 
         if ($this->_type & self::BLOCK) {
             $this->_open   = $info["open"];
@@ -99,7 +99,10 @@ class Tag extends \ArrayObject
         $actual = (bool)($this->tpl->getOptions() & $option);
         if ($actual != $value) {
             $this->_changed[$option] = $actual;
-            $this->tpl->setOption(\Fenom::AUTO_ESCAPE, $value);
+            // was hardcoded to AUTO_ESCAPE: {strip} then silently toggled escaping
+            // instead of stripping, and restore() never undid it because it restores
+            // the option it recorded ($option), not the one it wrote.
+            $this->tpl->setOption($option, $value);
         }
     }
 
@@ -227,7 +230,7 @@ class Tag extends \ArrayObject
      */
     public function getContent(): string
     {
-        return substr($this->_body, $this->_offset);
+        return implode('', array_slice($this->_body, $this->_offset));
     }
 
     /**
@@ -238,8 +241,10 @@ class Tag extends \ArrayObject
      */
     public function cutContent(): string
     {
-        $content     = substr($this->_body, $this->_offset);
-        $this->_body = substr($this->_body, 0, $this->_offset);
+        $content = '';
+        while (count($this->_body) > $this->_offset) {
+            $content = array_pop($this->_body) . $content;
+        }
         return $content;
     }
 
@@ -250,8 +255,10 @@ class Tag extends \ArrayObject
      */
     public function replaceContent($new_content)
     {
-        $this->cutContent();
-        $this->_body .= $new_content;
+        while (count($this->_body) > $this->_offset) {
+            array_pop($this->_body);
+        }
+        $this->_body[] = $new_content;
     }
 
     /**
@@ -285,7 +292,7 @@ class Tag extends \ArrayObject
      */
     public function optStrip()
     {
-        $this->setOption(\Fenom::AUTO_STRIP, true);
+        $this->setOption(\pbFenom::AUTO_STRIP, true);
     }
 
     /**

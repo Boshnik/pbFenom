@@ -1,8 +1,8 @@
 <?php
-namespace Fenom;
+namespace pbFenom;
 
-use Fenom\Error\UnexpectedTokenException;
-use Fenom\Tokenizer;
+use pbFenom\Error\UnexpectedTokenException;
+use pbFenom\Tokenizer;
 
 class TokenizerTest extends TestCase
 {
@@ -108,7 +108,7 @@ class TokenizerTest extends TestCase
         try {
             $tokens->skip(T_STRING)->skip('(')->skip(':');
         } catch (\Exception $e) {
-            $this->assertInstanceOf('Fenom\Error\UnexpectedTokenException', $e);
+            $this->assertInstanceOf('pbFenom\Error\UnexpectedTokenException', $e);
             $this->assertStringStartsWith("Unexpected token '3' in expression, expect ':'", $e->getMessage());
         }
         $this->assertTrue($tokens->valid());

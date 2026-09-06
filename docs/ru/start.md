@@ -1,16 +1,17 @@
 Быстрый старт
 ============
 
-## Установка Fenom
+## Установка pbFenom
 
 ### Composer
 
-Fenom зарегистрирован на [packagist.org](https://packagist.org/) как пакет [fenom/fenom](https://packagist.org/packages/fenom/fenom).
-Что бы установить Fenom через composer пропишите в `composer.json` списке пакетов:
+pbFenom — форк [fenom/fenom](https://github.com/fenom-template/fenom) в собственном
+пространстве имён, поэтому может сосуществовать с оригиналом в одном процессе.
+Пропишите в `composer.json`:
 ```json
 {
     "require": {
-        "fenom/fenom": "^3.0"
+        "pageblocks/fenom": "^1.0"
     }
 }
 ```
@@ -18,31 +19,31 @@ Fenom зарегистрирован на [packagist.org](https://packagist.org/
 
 ### Ручная установка
 
-Клонируйте Fenom в любую директорию Вашего проекта: `git clone https://github.com/fenom-template/fenom.git`.
+Клонируйте pbFenom в любую директорию Вашего проекта: `git clone https://github.com/Boshnik/pbFenom.git`.
 
-Fenom использует [PSR-4](https://github.com/php-fig/fig-standards/blob/master/accepted/PSR-4-autoloader.md) стандарт автозагрузки.
+pbFenom использует [PSR-4](https://github.com/php-fig/fig-standards/blob/master/accepted/PSR-4-autoloader.md) стандарт автозагрузки.
 Подключите autoloader Composer или любой другой PSR-4 совместимый загрузчик:
 
 ```php
 require_once '/path/to/vendor/autoload.php';
 ```
 
-## Настройка Fenom
+## Настройка pbFenom
 
 Есть два варианта инициировать объект шаблонизатора: через `new` оператор и фабрику.
-Пример создания Fenom через фабрику:
+Пример создания pbFenom через фабрику:
 ```php
-$fenom = Fenom::factory('/path/to/templates', '/path/to/compiled/template', $options);
+$fenom = pbFenom::factory('/path/to/templates', '/path/to/compiled/template', $options);
 ```
-Пример создания Fenom через оператор `new`:
+Пример создания pbFenom через оператор `new`:
 ```php
-$fenom = new Fenom(new Fenom\Provider('/path/to/templates'));
+$fenom = new pbFenom(new pbFenom\Provider('/path/to/templates'));
 $fenom->setCompileDir('/path/to/template/cache');
 $fenom->setOptions($options);
 ```
 
 * `/path/to/templates` — директория в которой хранятся шаблоны.
-* `/path/to/template/cache` — директория в которую Fenom будет сохранять PHP-кеш шаблонов
+* `/path/to/template/cache` — директория в которую pbFenom будет сохранять PHP-кеш шаблонов
 * `$options` - битовая маска или массив [параметров](./configuration.md).
 
 ### Использование

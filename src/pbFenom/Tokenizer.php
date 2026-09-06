@@ -1,15 +1,16 @@
 <?php
+declare(strict_types=1);
 /*
- * This file is part of Fenom.
+ * This file is part of pbFenom.
  *
  * (c) 2013 Ivan Shalganov
  *
  * For the full copyright and license information, please view the license.md
  * file that was distributed with this source code.
  */
-namespace Fenom;
+namespace pbFenom;
 
-use Fenom\Error\UnexpectedTokenException;
+use pbFenom\Error\UnexpectedTokenException;
 
 /**
  * Each token have structure
@@ -20,7 +21,7 @@ use Fenom\Error\UnexpectedTokenException;
  *
  * @see http://php.net/tokenizer
  *
- * @package    Fenom
+ * @package    pbFenom
  * @author     Ivan Shalganov <a.cobest@gmail.com>
  */
 class Tokenizer
@@ -290,7 +291,7 @@ class Tokenizer
      * Move forward to next element
      *
      * @link http://php.net/manual/en/iterator.next.php
-     * @return Tokenizer
+     * @return static
      */
     public function next(): static
     {
@@ -329,7 +330,7 @@ class Tokenizer
     /**
      * If the next token is a valid one, move the position of cursor one step forward. Otherwise throws an exception.
      * @param array $tokens
-     * @return mixed
+     * @return void
      * @throws UnexpectedTokenException
      */
     public function _next(array $tokens): void
@@ -437,7 +438,7 @@ class Tokenizer
 
     /**
      * Step back
-     * @return Tokenizer
+     * @return static
      */
     public function back(): static
     {
@@ -545,7 +546,7 @@ class Tokenizer
      * Skip specific token or throw an exception
      *
      * @throws UnexpectedTokenException
-     * @return Tokenizer
+     * @return static
      */
     public function skip( /*$token1, $token2, ...*/): static
     {
@@ -567,7 +568,7 @@ class Tokenizer
      * Skip specific token or do nothing
      *
      * @param int|string $token1
-     * @return Tokenizer
+     * @return static
      */
     public function skipIf(int|string $token1 /*, $token2, ...*/): static
     {
@@ -582,7 +583,7 @@ class Tokenizer
      * Check current token's type
      *
      * @param int|string $token1
-     * @return Tokenizer
+     * @return static
      * @throws UnexpectedTokenException
      */
     public function need(int|string $token1 /*, $token2, ...*/): static

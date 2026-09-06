@@ -1,4 +1,4 @@
-Extends Fenom
+Extends pbFenom
 =============
 
 *TODO*
@@ -13,55 +13,71 @@ Compilers invokes during compilation template to PHP source and have to
 
 ## Inline function
 
-Примитивное добавление функции можно осуществить следующим образом:
-
 ```php
-$fenom->addFunction(string $function_name, callable $callback[, callable $parser]);
+$fenom->addFunction(string $name, callable $callback [, callable $parser]);
 ```
 
-В данном случае запускается стандартный парсер, который автоматически разберет аргументы тега, которые должны быть в формате HTML аттрибутов и отдаст их в функцию ассоциативным массивом:
+By default the tag's arguments are mapped onto the **callback's own signature** by
+reflection — named arguments by name, bare ones by position:
 
 ```php
-$fenom->addFunction("some_function", function (array $params) {
-    /* ... */
+$fenom->addFunction('greet', function (string $name, string $greeting = 'Hello'): string {
+    return "$greeting, $name!";
 });
 ```
-
-При необходимости можно переопределить парсер на произвольный:
-
-```php
-$fenom->addFunction("some_function", $some_function, function (Fenom\Tokenizer $tokenizer, Fenom\Template $template) {
-    /* parse tag */
-});
-```
-
-Существует более простой способ добавления произвольной функции:
-
-```php
-$fenom->addFunctionSmarty(string $function_name, callable $callback);
-```
-
-В данном случае парсер сканирует список аргументов коллбека и попробует сопоставить с аргументами тега.
-
-```php
-class XYCalcs
-{
-    public static function calc($x, $y = 5)
-    {
-        /* ... */
-    }
-}
-
-$fenom->addFunctionSmart('calc', 'XYCalcs::calc');
-```
-
-then
-
 ```smarty
-{calc x=$top y=50} or {calc y=50 x=$top} is XYCalcs::calc($top, 50)
-{calc x=$top} or {calc $top} is XYCalcs::calc($top)
+{greet name="World"}                  {* Hello, World! *}
+{greet name="World" greeting="Hi"}    {* Hi, World! *}
+{greet "World"}                       {* positional *}
 ```
-Таким образом вы успешно можете добавлять Ваши функции или методы.
+
+So the parameter names are part of your template API: renaming one breaks templates.
+A missing required argument is reported at compile time.
+
+`addFunctionSmart()` is a synonym of the above, kept because it was the only way to get
+this behaviour before 1.1.0.
+
+### The raw form
+
+To receive the arguments as an array instead, ask for it explicitly:
+
+```php
+$fenom->addFunction('some_function', function (array $params, pbFenom\Render $tpl) {
+    /* ... */
+}, pbFenom::RAW_FUNC_PARSER);
+```
+
+This was the default before 1.1.0, which is why writing a function used to feel harder
+than writing a modifier.
+
+### One callable, both ways
+
+Register it twice, under the same name:
+
+```php
+$excerpt = fn(string $text, int $words = 10): string => /* ... */;
+$fenom->addModifier('excerpt', $excerpt);
+$fenom->addFunction('excerpt', $excerpt);
+```
+```smarty
+{$post.body|excerpt:20}
+{excerpt text=$post.body words=20}
+```
+
+Two calls rather than one helper, deliberately: the second claims a **tag** name, and
+tag names collide. `escape` and `strip` are each both a built-in modifier and a built-in
+block tag, so a single call that quietly did both could overwrite `{strip}...{/strip}`.
+
+### A parser of your own
+
+For full control over how the tag is parsed:
+
+```php
+$fenom->addFunction('some_function', $callback,
+    function (pbFenom\Tokenizer $tokenizer, pbFenom\Tag $tag) {
+        /* return the PHP code for this tag */
+    });
+```
 
 ## Block function
 
@@ -87,7 +103,7 @@ $fenom->addBlockFunction('some_block_function', function ($content, array $param
 $fenom->addCompiler(string $compiler, callable $parser);
 ```
 
-Парсер должен принимать `Fenom\Tokenizer $tokenizer`, `Fenom\Template $template` и возвращать PHP код.
+Парсер должен принимать `pbFenom\Tokenizer $tokenizer`, `pbFenom\Template $template` и возвращать PHP код.
 Компилятор так же можно импортировать из класса автоматически
 
 ```php
@@ -144,13 +160,13 @@ $fenom->addTest($name, $code);
 
 Бывает так что шаблны не хранятся на файловой сиситеме, а хранятся в некотором хранилище, например, в базе данных MySQL.
 В этом случае шаблонизатору нужно описать как забирать шаблоны из хранилища, как проверять дату изменения шаблона и где хранить кеш шаблонов (опционально).
-Эту задачу берут на себя Providers, это объекты реальзующие интерфейс `Fenom\ProviderInterface`.
+Эту задачу берут на себя Providers, это объекты реальзующие интерфейс `pbFenom\ProviderInterface`.
 
 # Extends accessor
 
 # Extends cache
 
-Изначально Fenom не расчитывался на то что кеш скомпиленых шаблонов может располагаться не на файловой системе.
+Изначально pbFenom не расчитывался на то что кеш скомпиленых шаблонов может располагаться не на файловой системе.
 Однако, в теории, есть возможность реализовать свое кеширование для скомпиленых шаблонов без переопределения шаблонизатора.
 Речь идет о своем протоколе, отличным от `file://`, который [можно определить](http://php.net/manual/en/class.streamwrapper.php) в PHP.
 

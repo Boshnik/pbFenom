@@ -19,7 +19,7 @@ $fenom->addProvider("cms", $cmsProvider, '/path/to/cms/cache');
 
 Parameters:
 * `$scm` — schema name used in template references (e.g., `db:template.tpl`)
-* `$provider` — object implementing `Fenom\ProviderInterface`
+* `$provider` — object implementing `pbFenom\ProviderInterface`
 * `$compile_path` (optional) — separate directory for compiled templates from this provider
 
 ## Using Provider Templates
@@ -36,10 +36,10 @@ $result = $fenom->fetch('cms:article.tpl', $vars);
 
 ## Creating a Custom Provider
 
-Create a class that implements `Fenom\ProviderInterface`:
+Create a class that implements `pbFenom\ProviderInterface`:
 
 ```php
-use Fenom\ProviderInterface;
+use pbFenom\ProviderInterface;
 
 class DatabaseProvider implements ProviderInterface {
     private $pdo;

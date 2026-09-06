@@ -1,5 +1,5 @@
 <?php
-namespace Fenom;
+namespace pbFenom;
 
 
 class ModifiersTest extends TestCase

@@ -1,7 +1,7 @@
 <?php
 
-require(__DIR__ . "/../src/Fenom.php");
-//Fenom::registerAutoload();
+require(__DIR__ . "/../src/pbFenom.php");
+//pbFenom::registerAutoload();
 
 define('FENOM_RESOURCES', __DIR__ . "/resources");
 

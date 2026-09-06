@@ -1,5 +1,5 @@
 <?php
-namespace Fenom;
+namespace pbFenom;
 
 class MacrosTest extends TestCase
 {
@@ -117,7 +117,7 @@ class MacrosTest extends TestCase
 
     public function testImportMiss()
     {
-        $this->expectException(exception: \Fenom\Error\CompileException::class);
+        $this->expectException(exception: \pbFenom\Error\CompileException::class);
         $this->expectExceptionMessage("Undefined macro 'plus'");
         $tpl = $this->fenom->compile('import_miss.tpl');
 

@@ -1,22 +1,22 @@
 <?php
+declare(strict_types=1);
 /*
- * This file is part of Fenom.
+ * This file is part of pbFenom.
  *
  * (c) 2013 Ivan Shalganov
  *
  * For the full copyright and license information, please view the license.md
  * file that was distributed with this source code.
  */
-namespace Fenom;
+namespace pbFenom;
 
-use Doctrine\Instantiator\Exception\InvalidArgumentException;
-use Fenom\Error\CompileException;
-use Fenom\Error\InvalidUsageException;
-use Fenom\Error\UnexpectedTokenException;
+use pbFenom\Error\CompileException;
+use pbFenom\Error\InvalidUsageException;
+use pbFenom\Error\UnexpectedTokenException;
 
 /**
  * Compilers collection
- * @package Fenom
+ * @package pbFenom
  * @author     Ivan Shalganov <a.cobest@gmail.com>
  */
 class Compiler
@@ -32,11 +32,11 @@ class Compiler
     public static function tagInclude(Tokenizer $tokens, Tag $tag): string
     {
         $tpl   = $tag->tpl;
-        $name  = false;
+        $name  = null;
         $cname = $tpl->parsePlainArg($tokens, $name);
         $p     = $tpl->parseParams($tokens);
         if ($name) {
-            if ($tpl->getStorage()->getOptions() & \Fenom::FORCE_INCLUDE) {
+            if ($tpl->getStorage()->getOptions() & \pbFenom::FORCE_INCLUDE) {
                 $_t = $tpl;
                 $recursion = false;
                 while($_t->parent) {
@@ -60,10 +60,17 @@ class Compiler
                 throw new \LogicException("Template $name not found");
             }
         }
+        // For a static name the resolved Render is the same for the whole render call,
+        // but this used to re-enter getTemplate() on every iteration of an enclosing
+        // loop. Memoise it per call-site; the temp lives in the closure's scope.
+        $get = '$tpl->getStorage()->getTemplate(' . $cname . ')';
+        if ($name) {
+            $get = '(' . $tpl->tmpVar() . ' ??= ' . $get . ')';
+        }
         if ($p) {
-            return '$tpl->getStorage()->getTemplate(' . $cname . ')->display(' . self::toArray($p) . ' + $var);';
+            return $get . '->display(' . self::toArray($p) . ' + $var);';
         } else {
-            return '$tpl->getStorage()->getTemplate(' . $cname . ')->display($var);';
+            return $get . '->display($var);';
         }
     }
 
@@ -136,7 +143,8 @@ class Compiler
      * @param Tokenizer $tokens
      * @param Tag $scope
      * @return string
-     * @throws InvalidUsageException*@throws CompileException
+     * @throws InvalidUsageException
+     * @throws CompileException
      * @throws UnexpectedTokenException
      * @throws CompileException
      */
@@ -180,6 +188,19 @@ class Compiler
         } else {
             $scope["value"] = '$_un';
         }
+        // Reading $var["row"]["name"] costs two hash lookups per access. Binding the
+        // loop variable to a local *reference* costs one, and because it is a
+        // reference $var["row"] stays in sync for {include}, macros and $.tpl.
+        $scope["aliases"] = array();
+        foreach (array("value", "key") as $slot) {
+            if ($scope[$slot] && preg_match('/^\$var\["(\w+)"\]$/', $scope[$slot], $m)) {
+                $local = $scope->tpl->tmpVar();
+                $scope["before"][] = "$local = &{$scope[$slot]}";
+                $scope[$slot]      = $local;
+                $scope["aliases"][] = $m[1];
+                $scope->tpl->pushVarAlias($m[1], $local);
+            }
+        }
         while ($token = $tokens->key()) {
             $param = $tokens->get(T_STRING);
             $var_name = self::foreachProp($scope, $param);
@@ -192,6 +213,113 @@ class Compiler
     }
 
     /**
+     * Open tag {for ...}
+     *
+     * Restored: the implementation was dropped by the 3.0 PHP-8 migration while the
+     * registration in Fenom::$_actions was left behind, so the documented {for} tag
+     * fatalled with "Compiler does not have a method forOpen" from 3.0.0 onwards.
+     *
+     * @param Tokenizer $tokens
+     * @param Tag $scope
+     * @return string
+     * @throws UnexpectedTokenException
+     * @throws InvalidUsageException
+     */
+    public static function forOpen(Tokenizer $tokens, Tag $scope): string
+    {
+        $p = array(
+            "index" => false,
+            "first" => false,
+            "last"  => false,
+            "step"  => 1,
+            "to"    => false,
+        );
+        $scope["after"] = $before = $body = array();
+        $i              = array('', '');
+        $c              = "";
+        $var            = $scope->tpl->parseTerm($tokens, $is_var);
+        if (!$is_var) {
+            throw new UnexpectedTokenException($tokens);
+        }
+        $tokens->get("=");
+        $tokens->next();
+        $val = $scope->tpl->parseExpr($tokens);
+        $p   = $scope->tpl->parseParams($tokens, $p);
+
+        if (is_numeric($p["step"])) {
+            if ($p["step"] > 0) {
+                $condition = "$var <= {$p['to']}";
+                if ($p["last"]) {
+                    $c = "($var + {$p['step']}) > {$p['to']}";
+                }
+            } elseif ($p["step"] < 0) {
+                $condition = "$var >= {$p['to']}";
+                if ($p["last"]) {
+                    $c = "($var + {$p['step']}) < {$p['to']}";
+                }
+            } else {
+                throw new InvalidUsageException("Invalid step value");
+            }
+        } else {
+            $condition = "({$p['step']} > 0 && $var <= {$p['to']} || {$p['step']} < 0 && $var >= {$p['to']})";
+            if ($p["last"]) {
+                $c = "({$p['step']} > 0 && ($var + {$p['step']}) <= {$p['to']} || {$p['step']} < 0 && ($var + {$p['step']}) >= {$p['to']})";
+            }
+        }
+
+        if ($p["first"]) {
+            $before[]         = $p["first"] . ' = true';
+            $scope["after"][] = $p["first"] . ' && (' . $p["first"] . ' = false )';
+        }
+        if ($p["last"]) {
+            $before[] = $p["last"] . ' = false';
+            $body[]   = "if($c) {$p['last']} = true";
+        }
+        if ($p["index"]) {
+            $i[0] .= $p["index"] . ' = 0,';
+            $i[1] .= $p["index"] . '++,';
+        }
+
+        $scope["else"]      = false;
+        $scope["else_cond"] = "$var==$val";
+        $before             = $before ? implode("; ", $before) . ";" : "";
+        $body               = $body ? implode("; ", $body) . ";" : "";
+        $scope["after"]     = $scope["after"] ? implode("; ", $scope["after"]) . ";" : "";
+
+        return "$before for({$i[0]} $var=$val; $condition;{$i[1]} $var+={$p['step']}) { $body";
+    }
+
+    /**
+     * Tag {forelse}
+     *
+     * @param Tokenizer $tokens
+     * @param Tag $scope
+     * @return string
+     */
+    public static function forElse(Tokenizer $tokens, Tag $scope): string
+    {
+        $scope["no-break"] = $scope["no-continue"] = true;
+        $scope["else"]     = true;
+        return " } if({$scope['else_cond']}) {";
+    }
+
+    /**
+     * Close tag {/for}
+     *
+     * @param Tokenizer $tokens
+     * @param Tag $scope
+     * @return string
+     */
+    public static function forClose(Tokenizer $tokens, Tag $scope): string
+    {
+        if ($scope["else"]) {
+            return '}';
+        } else {
+            return " {$scope['after']} }";
+        }
+    }
+
+    /**
      * Tag {foreachelse}
      *
      * @param Tokenizer $tokens
@@ -201,6 +329,10 @@ class Compiler
     public static function foreachElse(Tokenizer $tokens, Tag $scope): string
     {
         $scope["no-break"] = $scope["no-continue"] = $scope["else"] = true;
+        foreach ((array)$scope["aliases"] as $name) {
+            $scope->tpl->popVarAlias($name);
+        }
+        $scope["aliases"] = array();
         $after = $scope["after"]  ? implode("; ", $scope["after"]) . ";" : "";
         return " {$after} } } else {";
     }
@@ -226,8 +358,16 @@ class Compiler
                     break;
                 case "last":
                     $scope["before"][] = $var_name . ' = false';
+                    // The {foreach} guard explicitly accepts \Traversable, but count()
+                    // rejects it, so a Generator used to fatal here. Non-countable
+                    // iterables are materialised first — iterator_count() would consume
+                    // the generator and leave nothing to iterate.
+                    $src = $scope->tpl->tmpVar();
+                    $scope["before"][] = $src . ' = is_countable(' . $scope["from"] . ')'
+                        . ' ? ' . $scope["from"] . ' : iterator_to_array(' . $scope["from"] . ')';
+                    $scope["from"]     = $src;
                     $scope["uid"]      = $scope->tpl->tmpVar();
-                    $scope["before"][] = $scope["uid"] . " = count({$scope["from"]})";
+                    $scope["before"][] = $scope["uid"] . " = count($src)";
                     $scope["body"][]   = 'if(!--' . $scope["uid"] . ') ' . $var_name . ' = true';
                     break;
                 default:
@@ -248,6 +388,9 @@ class Compiler
      */
     public static function foreachClose(Tokenizer $tokens, Tag $scope): string
     {
+        foreach ((array)$scope["aliases"] as $name) {
+            $scope->tpl->popVarAlias($name);
+        }
         $before         = $scope["before"] ? implode("; ", $scope["before"]) . ";" : "";
         $head           = $scope["body"]   ? implode("; ", $scope["body"]) . ";" : "";
         $body           = $scope->getContent();
@@ -418,7 +561,7 @@ class Compiler
      * @param Tokenizer $tokens
      * @param Tag $tag
      * @throws Error\InvalidUsageException
-     * @return string
+     * @return void
      */
     public static function tagExtends(Tokenizer $tokens, Tag $tag): void
     {
@@ -463,7 +606,7 @@ class Compiler
                 $parent = $tpl->extend($child->extends);
                 $child  = $parent->extends ? $parent : false;
             }
-            $tpl->extends = false;
+            $tpl->extends = null;
         }
         $tpl->extend_body = false;
     }
@@ -588,13 +731,13 @@ class Compiler
      */
     public static function smartFuncParser(Tokenizer $tokens, Tag $tag): string
     {
-        if (strpos($tag->callback, "::") || is_array($tag->callback)) {
-            list($class, $method) = explode("::", $tag->callback, 2);
-            $ref = new \ReflectionMethod($class, $method);
-        } else {
-            $ref = new \ReflectionFunction($tag->callback);
-        }
-        $args   = array();
+        // Closure::fromCallable() normalises every callable form - closure, array
+        // callable, invokable object, "Class::method" - into something Reflection can
+        // read. The old code called strpos() on $tag->callback, which is a TypeError
+        // for anything but a string, so addFunctionSmart() only ever worked with
+        // string callables.
+        $ref  = new \ReflectionFunction(\Closure::fromCallable($tag->callback));
+        $args = array();
         $params = $tag->tpl->parseParams($tokens);
         foreach ($ref->getParameters() as $param) {
             if (isset($params[$param->getName()])) {
@@ -603,9 +746,20 @@ class Compiler
                 $args[] = $params[$param->getPosition()];
             } elseif ($param->isOptional()) {
                 $args[] = var_export($param->getDefaultValue(), true);
+            } elseif (!$param->allowsNull()) {
+                throw new InvalidUsageException(
+                    "Function {$tag->name} requires the '{$param->getName()}' argument"
+                );
             }
         }
-        return $tag->out($tag->callback . "(" . implode(", ", $args) . ')');
+        if (is_string($tag->callback)) {
+            return $tag->out($tag->callback . "(" . implode(", ", $args) . ')');
+        }
+        // not nameable in generated code: reach it through the registry at runtime
+        return $tag->out(
+            'call_user_func_array($tpl->getStorage()->getTag(' . var_export($tag->name, true)
+            . ')["function"], array(' . implode(", ", $args) . '))'
+        );
     }
 
     /**
@@ -618,7 +772,7 @@ class Compiler
     public static function stdFuncOpen(Tokenizer $tokens, Tag $tag): string
     {
         $tag["params"] = self::toArray($tag->tpl->parseParams($tokens));
-        $tag->setOption(\Fenom::AUTO_ESCAPE, false);
+        $tag->setOption(\pbFenom::AUTO_ESCAPE, false);
         return 'ob_start();';
     }
 
@@ -631,7 +785,7 @@ class Compiler
      */
     public static function stdFuncClose(Tokenizer $tokens, Tag $tag): string
     {
-        $tag->restore(\Fenom::AUTO_ESCAPE);
+        $tag->restore(\pbFenom::AUTO_ESCAPE);
         if(is_string($tag->callback)) {
             return $tag->out($tag->callback . "(" . $tag["params"] . ', ob_get_clean(), $tpl, $var)');
         } else {
@@ -894,6 +1048,9 @@ class Compiler
             "body"      => "",
             "recursive" => false
         );
+        // A macro body receives its own $var and, when recursive, becomes a separate
+        // closure — an enclosing {foreach}'s local alias does not exist in that scope.
+        $scope["saved_aliases"] = $scope->tpl->suspendVarAliases();
         return;
     }
 
@@ -903,6 +1060,7 @@ class Compiler
      */
     public static function macroClose(Tokenizer $tokens, Tag $scope): void
     {
+        $scope->tpl->restoreVarAliases((array)$scope["saved_aliases"]);
         if ($scope["recursive"]) {
             $scope["macro"]["recursive"] = true;
         }
@@ -930,7 +1088,7 @@ class Compiler
     {
         $expected = $tokens->get(T_STRING) == "true";
         $tokens->next();
-        $tag->setOption(\Fenom::AUTO_ESCAPE, $expected);
+        $tag->setOption(\pbFenom::AUTO_ESCAPE, $expected);
     }
 
     /**
@@ -948,7 +1106,7 @@ class Compiler
     {
         $expected = $tokens->get(T_STRING) == "true";
         $tokens->next();
-        $tag->setOption(\Fenom::AUTO_STRIP, $expected);
+        $tag->setOption(\pbFenom::AUTO_STRIP, $expected);
     }
 
     /**
@@ -984,7 +1142,9 @@ class Compiler
         $name = str_replace(array('\'', '"'), '', $tokens->get(T_CONSTANT_ENCAPSED_STRING));
         $tokens->next();
         if(isset($tag->tpl->blocks[$name])) {
-            return "?>".substr($tag->tpl->blocks[$name]["block"], 1, -1)."<?php ";
+            // substr($block, 1, -1) blindly chopped one character off each end of
+            // already-compiled PHP, so {paste} emitted a syntax error and cached it
+            return "?>" . $tag->tpl->blocks[$name]["block"] . "<?php ";
         } else {
             return "";
         }

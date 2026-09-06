@@ -1,9 +1,8 @@
-.idea
-vendor
-build
-composer.phar
-tests/resources/compile/*
-!.gitkeep
-tests/resources/template/*
-sandbox/compiled/*
+/vendor/
+/composer.lock
 /.phpunit.result.cache
+/coverage.xml
+/phpstan-baseline.neon.bak
+/tests/resources/compile/*
+!/tests/resources/compile/.gitkeep
+.idea/

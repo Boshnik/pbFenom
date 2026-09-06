@@ -1,13 +1,14 @@
 <?php
+declare(strict_types=1);
 /*
- * This file is part of Fenom.
+ * This file is part of pbFenom.
  *
  * (c) 2013 Ivan Shalganov
  *
  * For the full copyright and license information, please view the license.md
  * file that was distributed with this source code.
  */
-namespace Fenom;
+namespace pbFenom;
 
 /**
  * Base template provider
@@ -18,6 +19,11 @@ class Provider implements ProviderInterface
     private string $_path;
 
     protected bool $_clear_cache = false;
+
+    /**
+     * @var array<string, string|null> memoised name => absolute path (null = rejected)
+     */
+    private array $_resolved = [];
 
     /**
      * Clean directory from files
@@ -38,12 +44,17 @@ class Provider implements ProviderInterface
             );
             foreach ($iterator as $file) {
                 /* @var \splFileInfo $file */
-                if ($file->isFile()) {
+                if ($file->isLink()) {
+                    // isFile() is true for a symlink to a regular file and getRealPath()
+                    // resolves to its target, so the old code deleted files outside the
+                    // directory it was asked to clean. Remove the link itself instead.
+                    unlink($file->getPathname());
+                } elseif ($file->isFile()) {
                     if (!str_starts_with($file->getBasename(), ".")) {
-                        unlink($file->getRealPath());
+                        unlink($file->getPathname());
                     }
                 } elseif ($file->isDir()) {
-                    rmdir($file->getRealPath());
+                    rmdir($file->getPathname());
                 }
             }
         }
@@ -82,6 +93,7 @@ class Provider implements ProviderInterface
      */
     public function setClearCachedStats(bool $status = true) {
         $this->_clear_cache = $status;
+        $this->_resolved    = [];
     }
 
     /**
@@ -96,7 +108,8 @@ class Provider implements ProviderInterface
         if($this->_clear_cache) {
             clearstatcache(true, $tpl);
         }
-        $time = filemtime($tpl);
+        $mtime = filemtime($tpl);
+        $time  = $mtime === false ? null : (float)$mtime;
         return file_get_contents($tpl);
     }
 
@@ -146,12 +159,46 @@ class Provider implements ProviderInterface
      */
     protected function _getTemplatePath(string $tpl): string
     {
-        $path = realpath($this->_path . "/" . $tpl);
-        if ($path && str_starts_with($path, $this->_path)) {
+        if (($path = $this->_resolve($tpl)) !== null) {
             return $path;
-        } else {
-            throw new \RuntimeException("Template $tpl not found");
         }
+        throw new \RuntimeException("Template $tpl not found");
+    }
+
+    /**
+     * Resolve a template name to an absolute path inside the template root,
+     * or null when it escapes the root or does not exist.
+     */
+    private function _resolve(string $tpl): ?string
+    {
+        // realpath() is the single most expensive call on the AUTO_RELOAD path, and a
+        // template name resolves to the same file for the whole request. Memoising it
+        // keeps the containment check off the hot path. setClearCachedStats() opts out.
+        if (!$this->_clear_cache && array_key_exists($tpl, $this->_resolved)) {
+            return $this->_resolved[$tpl];
+        }
+        $path = $this->_resolveUncached($tpl);
+        if (!$this->_clear_cache) {
+            $this->_resolved[$tpl] = $path;
+        }
+        return $path;
+    }
+
+    private function _resolveUncached(string $tpl): ?string
+    {
+        if (str_contains($tpl, "\0")) {
+            // realpath() raises an uncaught ValueError on NUL, turning a 404 into a 500
+            return null;
+        }
+        $path = realpath($this->_path . "/" . $tpl);
+        if ($path === false || !is_file($path)) {
+            return null;
+        }
+        // The trailing separator matters: a bare prefix test also accepts sibling
+        // directories whose name merely starts with the root's ("/app/tpl_backup"
+        // passes a check against "/app/tpl").
+        $root = rtrim($this->_path, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+        return str_starts_with($path, $root) ? $path : null;
     }
 
     /**
@@ -160,7 +207,7 @@ class Provider implements ProviderInterface
      */
     public function templateExists(string $tpl): bool
     {
-        return ($path = realpath($this->_path . "/" . $tpl)) && str_starts_with($path, $this->_path);
+        return $this->_resolve($tpl) !== null;
     }
 
     /**
@@ -172,14 +219,18 @@ class Provider implements ProviderInterface
     public function verify(array $templates): bool
     {
         foreach ($templates as $template => $mtime) {
-            $template = $this->_path . '/' . $template;
-            if($this->_clear_cache) {
-                clearstatcache(true, $template);
-            }
-            if (@filemtime($template) != $mtime) {
+            // this was the one entry point that concatenated the path directly,
+            // so a doctored `depends` list could stat any file on disk
+            $path = $this->_resolve($template);
+            if ($path === null) {
                 return false;
             }
-
+            if($this->_clear_cache) {
+                clearstatcache(true, $path);
+            }
+            if (filemtime($path) != $mtime) {
+                return false;
+            }
         }
         return true;
     }

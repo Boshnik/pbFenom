@@ -1,20 +1,21 @@
 <?php
+declare(strict_types=1);
 /*
- * This file is part of Fenom.
+ * This file is part of pbFenom.
  *
  * (c) 2013 Ivan Shalganov
  *
  * For the full copyright and license information, please view the license.md
  * file that was distributed with this source code.
  */
-namespace Fenom;
+namespace pbFenom;
 
-use Fenom\Error\CompileException;
-use Fenom\Error\UnexpectedTokenException;
+use pbFenom\Error\CompileException;
+use pbFenom\Error\UnexpectedTokenException;
 
 /**
  * Class Accessor
- * @package Fenom
+ * @package pbFenom
  */
 class Accessor {
     public static array $vars = array(
@@ -105,7 +106,7 @@ class Accessor {
     public static function tpl(Tokenizer $tokens): string
     {
         $method = $tokens->skip('.')->need(T_STRING)->getAndNext();
-        if(method_exists('Fenom\Render', 'get'.$method)) {
+        if(method_exists('pbFenom\Render', 'get'.$method)) {
             return '$tpl->get'.ucfirst($method).'()';
         } else {
             throw new UnexpectedTokenException($tokens->back());
@@ -117,7 +118,7 @@ class Accessor {
      */
     public static function version(): string
     {
-        return 'Fenom::VERSION';
+        return 'pbFenom::VERSION';
     }
 
     /**
@@ -178,16 +179,42 @@ class Accessor {
         if($tokens->is(T_DOUBLE_COLON)) {
             $callable .= '::'.$tokens->next()->need(Tokenizer::MACRO_STRING)->getAndNext();
         }
+        $dotted = str_replace('\\', '.', $callable);
+
+        // a callable that simply does not exist is a typo, not a policy violation —
+        // report it as such before any of the security checks below
+        if(!is_callable($callable)) {
+            throw new \RuntimeException("PHP method $dotted does not exists.");
+        }
+
+        // {$.php.foo()} and {$.call.foo()} used to reach call_user_func_array() without
+        // consulting any option, so they bypassed DENY_PHP_CALLS and the DENY_NATIVE_FUNCS
+        // whitelist that block the equivalent plain call {foo()}.
+        // LogicException is the project's idiom for a policy violation; Template::parseTag
+        // converts it into a SecurityException carrying the template position.
+        if ($tpl->getOptions() & \pbFenom::DENY_PHP_CALLS) {
+            throw new \LogicException("Callback $dotted is disabled");
+        }
+        if (!str_contains($callable, '::') && !$tpl->getStorage()->isAllowedFunction($callable)) {
+            throw new \LogicException("Callback $dotted is not allowed");
+        }
+
         $call_filter = $tpl->getStorage()->getCallFilters();
         if($call_filter) {
+            // any matching filter allows the call; requiring *all* of them to match meant
+            // that registering two filters made every callback unreachable
+            $allowed = false;
             foreach($call_filter as $filter) {
-                if(!fnmatch(addslashes($filter), $callable)) {
-                    throw new \LogicException("Callback ".str_replace('\\', '.', $callable)." is not available by settings");
+                // FNM_NOESCAPE keeps the namespace separator literal instead of letting it
+                // escape the next wildcard (this is what the old addslashes() call was for)
+                if(fnmatch($filter, $callable, FNM_NOESCAPE)) {
+                    $allowed = true;
+                    break;
                 }
             }
-        }
-        if(!is_callable($callable)) {
-            throw new \RuntimeException("PHP method ".str_replace('\\', '.', $callable).' does not exists.');
+            if (!$allowed) {
+                throw new \LogicException("Callback $dotted is not available by settings");
+            }
         }
         if($tokens->is('(')) {
             $arguments = 'array'.$tpl->parseArgs($tokens).'';
@@ -213,15 +240,16 @@ class Accessor {
                 throw new \RuntimeException("Template $static not found");
             }
         }
+        $vars = '$var';
         if($tokens->is(',')) {
             $tokens->next();
             if($tokens->is('[')){
                 $vars = $tpl->parseArray($tokens) . ' + $var';
             } elseif($tokens->is(T_VARIABLE)){
                 $vars = $tpl->parseExpr($tokens) . ' + $var';
+            } elseif(!$tokens->is(')')) {
+                throw new UnexpectedTokenException($tokens, null, 'an array or a variable');
             }
-        } else {
-            $vars = '$var';
         }
         $tokens->skip(')');
         return '$tpl->getStorage()->fetch('.$name.', '.$vars.')';
@@ -240,7 +268,8 @@ class Accessor {
             $tokens->next();
             return isset($tpl->blocks[$name]) ? 'true' : 'false';
         } else {
-            return "array(".implode(",", array_keys($tpl->blocks)).")";
+            // block names were emitted unquoted, producing array(name) -> Undefined constant
+            return "array(" . implode(",", array_map(fn($n) => var_export((string)$n, true), array_keys($tpl->blocks))) . ")";
         }
     }
 } 

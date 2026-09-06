@@ -1,0 +1,12 @@
+parameters:
+    level: 3
+    # Level 4+ is mostly false positives: PHPStan does not model Tokenizer's
+    # internal cursor, so it thinks current() still returns the token that an
+    # earlier guard narrowed, and reports live branches as dead code.
+    paths:
+        - src
+    bootstrapFiles:
+        - vendor/autoload.php
+    treatPhpDocTypesAsCertain: false
+includes:
+    - phpstan-baseline.neon

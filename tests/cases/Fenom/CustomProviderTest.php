@@ -1,6 +1,6 @@
 <?php
 
-namespace Fenom;
+namespace pbFenom;
 
 
 class CustomProviderTest extends TestCase

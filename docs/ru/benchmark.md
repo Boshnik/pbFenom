@@ -3,9 +3,9 @@ Benchmark
 
 To start benchmark use script `benchmark/run.php -h`.
 
-### Smarty3 vs Twig vs Fenom
+### Smarty3 vs Twig vs pbFenom
 
-Smarty3 vs Twig vs Fenom
+Smarty3 vs Twig vs pbFenom
 
 Generate templates... Done
 
@@ -60,4 +60,4 @@ Generate templates... Done
 | --------------- | ------:| --------:| ------:|
 | Smarty3 (3.1.13)|    320 |      190 |  55095 |
 | Twig (1.13.0)   |    162 |      131 |  13908 |
-| Fenom (1.0.1)   |      9 |       16 |   3899 |
+| pbFenom (1.0.1)   |      9 |       16 |   3899 |

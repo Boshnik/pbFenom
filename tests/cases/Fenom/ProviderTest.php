@@ -1,8 +1,8 @@
 <?php
-namespace Fenom;
+namespace pbFenom;
 
-use Fenom;
-use Fenom\TestCase;
+use pbFenom;
+use pbFenom\TestCase;
 
 class ProviderTest extends TestCase
 {

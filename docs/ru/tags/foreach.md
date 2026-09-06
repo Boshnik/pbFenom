@@ -111,4 +111,4 @@
 {/foreach}
 ```
 
-В блоке `{foreachelse}...{/foreach}` использование `{break}`, `{continue}` выбросит исключение `Fenom\CompileException` при компиляции
+В блоке `{foreachelse}...{/foreach}` использование `{break}`, `{continue}` выбросит исключение `pbFenom\CompileException` при компиляции

@@ -1,25 +1,26 @@
 <?php
+declare(strict_types=1);
 /*
- * This file is part of Fenom.
+ * This file is part of pbFenom.
  *
  * (c) 2013 Ivan Shalganov
  *
  * For the full copyright and license information, please view the license.md
  * file that was distributed with this source code.
  */
-namespace Fenom;
+namespace pbFenom;
 
-use Fenom;
-use Fenom\Error\CompileException;
-use Fenom\Error\InvalidUsageException;
-use Fenom\Error\SecurityException;
-use Fenom\Error\TokenizeException;
-use Fenom\Error\UnexpectedTokenException;
+use pbFenom;
+use pbFenom\Error\CompileException;
+use pbFenom\Error\InvalidUsageException;
+use pbFenom\Error\SecurityException;
+use pbFenom\Error\TokenizeException;
+use pbFenom\Error\UnexpectedTokenException;
 
 /**
  * Template compiler
  *
- * @package    Fenom
+ * @package    pbFenom
  * @author     Ivan Shalganov <a.cobest@gmail.com>
  */
 class Template extends Render
@@ -71,7 +72,7 @@ class Template extends Render
     /**
      * @var string|null
      */
-    public ?string $extended;
+    public ?string $extended = null;
 
     /**
      * Stack of extended templates
@@ -89,10 +90,12 @@ class Template extends Render
     public ?Template $parent;
 
     /**
-     * Template PHP code
-     * @var string
+     * Template PHP code, accumulated as chunks and joined by getBody().
+     * Appending instead of concatenating keeps Tag::cutContent() from copying
+     * the whole body on every block-tag close (which made compilation O(n^2)).
+     * @var string[]
      */
-    private string $_body = "";
+    private array $_body = [];
     private int $_compile_stage = 0;
 
     /**
@@ -136,11 +139,11 @@ class Template extends Render
     private array $_tag_filters;
 
     /**
-     * @param Fenom $fenom Template storage
+     * @param pbFenom $fenom Template storage
      * @param int $options
      * @param Template $parent
      */
-    public function __construct(Fenom $fenom, $options, ?Template $parent = null)
+    public function __construct(pbFenom $fenom, $options, ?Template $parent = null)
     {
         $this->parent       = $parent;
         $this->_fenom       = $fenom;
@@ -177,14 +180,16 @@ class Template extends Render
      * Load source from provider
      * @param string $name
      * @param bool $compile
-     * @return self
+     * @return static
      * @throws CompileException
      */
     public function load(string $name, bool $compile = true): static
     {
         $this->_name = $name;
         $this->_crc  = crc32($this->_name);
-        if ($provider = strstr($name, ':', true)) {
+        // strstr() yields false, not null, when there is no schema separator
+        $provider = strstr($name, ':', true) ?: null;
+        if ($provider !== null) {
             $this->_scm       = $provider;
             $this->_base_name = substr($name, strlen($provider) + 1);
         } else {
@@ -204,7 +209,7 @@ class Template extends Render
      * @param string $name template name
      * @param string $src template source
      * @param bool $compile
-     * @return \Fenom\Template
+     * @return static
      * @throws CompileException
      */
     public function source(string $name, string $src, bool $compile = true): static
@@ -268,7 +273,7 @@ class Template extends Render
 
                         if ($this->_ignore) { // check ignore
                             if ($tag === '/' . $this->_ignore) { // turn off ignore
-                                $this->_ignore = false;
+                                $this->_ignore = null;
                             } else { // still ignore
                                 $this->_appendText('{' . $tag . '}');
                                 continue;
@@ -310,14 +315,21 @@ class Template extends Render
         }
         $this->_src = ""; // cleanup
         if ($this->_post) {
+            // post-compile callbacks take the body by reference as a plain string
+            $body = $original = $this->getBody();
             foreach ($this->_post as $cb) {
-                call_user_func_array($cb, array($this, &$this->_body));
+                call_user_func_array($cb, array($this, &$body));
+            }
+            // a callback may instead replace $this->_body itself (see Compiler::extendBody),
+            // so only write back when it actually rewrote the string it was handed
+            if ($body !== $original) {
+                $this->_body = [$body];
             }
         }
         $this->_compile_stage = self::COMPILE_STAGE_PROCESSED;
         $this->addDepend($this); // for 'verify' performance
         foreach ($this->_fenom->getPostFilters() as $filter) {
-            $this->_body = call_user_func($filter, $this, $this->_body);
+            $this->_body = [call_user_func($filter, $this, $this->getBody())];
         }
         $this->_compile_stage = self::COMPILE_STAGE_POST_FILTERED;
     }
@@ -368,7 +380,7 @@ class Template extends Render
     private function _appendText(string $text)
     {
         $this->_line += substr_count($text, "\n");
-        $strip = $this->_options & Fenom::AUTO_STRIP;
+        $strip = $this->_options & pbFenom::AUTO_STRIP;
         if ($this->_filters) {
             if (!str_contains($text, "<?")) {
                 foreach ($this->_filters as $filter) {
@@ -389,10 +401,14 @@ class Template extends Render
             $text = str_replace("<?", '<?php echo "<?"; ?>' . ($strip ? '' : PHP_EOL), $text);
         }
         if ($strip) {
-            $text = preg_replace('/\s+/uS', ' ', str_replace(array("\r", "\n"), " ", $text));
-            $text = str_replace("> <", "><", $text);
+            $flat    = str_replace(array("\r", "\n"), " ", $text);
+            $stripped = preg_replace('/\s+/uS', ' ', $flat);
+            if ($stripped === null) { // not valid UTF-8: fall back instead of dropping the text
+                $stripped = preg_replace('/\s+/S', ' ', $flat);
+            }
+            $text = str_replace("> <", "><", $stripped ?? $flat);
         }
-        $this->_body .= $text;
+        $this->_body[] = $text;
     }
 
     /**
@@ -407,7 +423,14 @@ class Template extends Render
             return;
         } else {
             $this->_line += substr_count($source, "\n");
-            $this->_body .= "<?php\n/* {$this->_name}:{$this->_line}: {$source} */\n $code ?>";
+            if ($this->_options & pbFenom::DEBUG_COMMENTS) {
+                // `*/` anywhere in the tag source would close this comment early and turn
+                // the remainder of the tag into executable PHP, regardless of any DENY_* option
+                $comment = str_replace('*/', '*\\/', "{$this->_name}:{$this->_line}: {$source}");
+                $this->_body[] = "<?php\n/* {$comment} */\n $code ?>";
+            } else {
+                $this->_body[] = "<?php\n $code ?>";
+            }
         }
     }
 
@@ -434,7 +457,7 @@ class Template extends Render
      */
     public function getBody(): string
     {
-        return $this->_body;
+        return implode('', $this->_body);
     }
 
     /**
@@ -446,14 +469,14 @@ class Template extends Render
     {
         $before = $this->_before ? implode("\n", $this->_before) . "\n" : "";
         return "<?php \n" .
-        "/** Fenom template '" . $this->_name . "' compiled at " . date('Y-m-d H:i:s') . " */\n" .
+        "/** pbFenom template '" . $this->_name . "' compiled at " . date('Y-m-d H:i:s') . " */\n" .
         $before . // some code 'before' template
-        "return new Fenom\\Render(\$fenom, " . $this->_getClosureSource() . ", array(\n" .
+        "return new pbFenom\\Render(\$fenom, " . $this->_getClosureSource() . ", array(\n" .
         "\t'options' => {$this->_options},\n" .
-        "\t'provider' => " . var_export($this->_scm, true) . ",\n" .
+        "\t'scm' => " . var_export($this->_scm, true) . ",\n" .
         "\t'name' => " . var_export($this->_name, true) . ",\n" .
         "\t'base_name' => " . var_export($this->_base_name, true) . ",\n" .
-        "\t'time' => {$this->_time},\n" .
+        "\t'time' => " . var_export($this->_time, true) . ",\n" .
         "\t'depends' => " . var_export($this->_depends, true) . ",\n" .
         "\t'macros' => " . $this->_getMacrosArray() . ",\n
         ));\n";
@@ -484,7 +507,7 @@ class Template extends Render
      */
     private function _getClosureSource(): string
     {
-        return "function (mixed \$var, mixed \$tpl) {\n?>{$this->_body}<?php\n}";
+        return "function (mixed \$var, mixed \$tpl) {\n?>" . $this->getBody() . "<?php\n}";
     }
 
     /**
@@ -496,9 +519,16 @@ class Template extends Render
      */
     public function display(array $values): array
     {
-        if (!$this->_code) { // TODO: remove
-            // evaluate template's code
-            eval("\$this->_code = " . $this->_getClosureSource() . ";\n\$this->_macros = " . $this->_getMacrosArray() . ';');
+        if (!$this->_code) {
+            // Rendering a template that was never written to disk (DISABLE_CACHE, or
+            // compileCode()). Loaded through a stream wrapper rather than eval() so the
+            // template name reaches the error message and the stack trace.
+            [$code, $macros] = CodeStream::evaluate(
+                'return [' . $this->_getClosureSource() . ', ' . $this->_getMacrosArray() . '];',
+                $this->_name
+            );
+            $this->_code   = $code;
+            $this->_macros = $macros;
             if (!$this->_code) {
                 throw new CompileException("Fatal error while creating the template");
             }
@@ -526,10 +556,18 @@ class Template extends Render
     public function out(string $data, ?bool $escape = null): string
     {
         if ($escape === null) {
-            $escape = $this->_options & Fenom::AUTO_ESCAPE;
+            $escape = $this->_options & pbFenom::AUTO_ESCAPE;
         }
         if ($escape) {
-            return "echo htmlspecialchars($data, ENT_COMPAT, " . var_export(Fenom::$charset, true) . ");";
+            // Flags come from Modifier so the inlined escape and the |escape modifier
+            // can never drift apart. See Modifier::HTML_ESCAPE_FLAGS for why not ENT_COMPAT.
+            // Passing the charset makes PHP parse the encoding name on every call.
+            // When it already matches default_charset the argument is pure overhead;
+            // the charset is part of the compile-cache signature, so this stays correct.
+            $args = strcasecmp(pbFenom::$charset, (string)ini_get('default_charset')) === 0
+                ? ""
+                : ", " . var_export(pbFenom::$charset, true);
+            return "echo htmlspecialchars($data, " . Modifier::HTML_ESCAPE_FLAGS . "$args);";
         } else {
             return "echo $data;";
         }
@@ -555,7 +593,7 @@ class Template extends Render
     /**
      * Extends the template
      * @param string $tpl
-     * @return \Fenom\Template parent
+     * @return \pbFenom\Template parent
      * @throws CompileException
      */
     public function extend(string $tpl): Template
@@ -572,6 +610,12 @@ class Template extends Render
             $this->ext_stack[] = $this->getName();
         }
         $this->ext_stack[] = $parent->getName();
+        if (count($this->ext_stack) > \pbFenom::$max_template_depth) {
+            throw new CompileException(
+                "Template inheritance is too deep (" . count($this->ext_stack) . "), "
+                . "probably a cycle: " . implode(' -> ', $this->ext_stack)
+            );
+        }
         $parent->_options  = $this->_options;
         $parent->ext_stack = $this->ext_stack;
         $parent->compile();
@@ -844,7 +888,7 @@ class Template extends Render
                 $code = $this->parseAccessor($tokens, $is_var);
                 if (!$is_var) {
                     if($tokens->is(T_OBJECT_OPERATOR)) {
-                        if ($this->_options & Fenom::DENY_METHODS) {
+                        if ($this->_options & pbFenom::DENY_METHODS) {
                             throw new \LogicException("Forbidden to call methods");
                         }
                         $code = $unary . $this->parseChain($tokens, $code);
@@ -859,18 +903,18 @@ class Template extends Render
                     $code = $this->parseVariable($tokens);
                 }
                 if ($tokens->is("(") && $tokens->hasBackList(T_STRING, T_OBJECT_OPERATOR)) {
-                    if ($this->_options & Fenom::DENY_METHODS) {
+                    if ($this->_options & pbFenom::DENY_METHODS) {
                         throw new \LogicException("Forbidden to call methods");
                     }
                     $code = $unary . $this->parseChain($tokens, $code);
                 } elseif ($tokens->is(Tokenizer::MACRO_INCDEC)) {
-                    if ($this->_options & Fenom::FORCE_VERIFY) {
+                    if ($this->_options & pbFenom::FORCE_VERIFY) {
                         $code = $unary . '(isset(' . $code . ') ? ' . $code . $tokens->getAndNext() . ' : null)';
                     } else {
                         $code = $unary . $code . $tokens->getAndNext();
                     }
                 } else {
-                    if ($this->_options & Fenom::FORCE_VERIFY) {
+                    if ($this->_options & pbFenom::FORCE_VERIFY) {
                         $code = $unary . '(isset(' . $code . ') ? ' . $code . ' : null)';
                     } else {
                         $is_var = true;
@@ -880,7 +924,7 @@ class Template extends Render
                 break;
             case T_DEC:
             case T_INC:
-                if ($this->_options & Fenom::FORCE_VERIFY) {
+                if ($this->_options & pbFenom::FORCE_VERIFY) {
                     $var  = $this->parseVariable($tokens);
                     $code = $unary . '(isset(' . $var . ') ? ' . $tokens->getAndNext() . $this->parseVariable($tokens) . ' : null)';
                 } else {
@@ -943,7 +987,7 @@ class Template extends Render
         }
         if (($allows & self::TERM_RANGE) && $tokens->is('.') && $tokens->isNext('.')) {
             $tokens->next()->next();
-            $code   = '(new \Fenom\RangeIterator(' . $code . ', ' . $this->parseTerm($tokens, $var, self::TERM_MODS) . '))';
+            $code   = '(new \pbFenom\RangeIterator(' . $code . ', ' . $this->parseTerm($tokens, $var, self::TERM_MODS) . '))';
             $is_var = false;
         }
         return $code;
@@ -974,6 +1018,65 @@ class Template extends Render
     }
 
     /**
+     * @var array<string, string[]> template var name => stack of PHP expressions.
+     * A {foreach} binds its value to a local reference so the body reads one hash
+     * level instead of two; $var[...] stays populated through that reference, so
+     * {include}, macros and $.tpl still observe the variable.
+     */
+    private array $_var_aliases = [];
+
+    /**
+     * Alias a template variable to a PHP expression for the current scope.
+     */
+    public function pushVarAlias(string $name, string $expr): void
+    {
+        $this->_var_aliases[$name][] = $expr;
+    }
+
+    /**
+     * Drop the innermost alias of a template variable.
+     */
+    public function popVarAlias(string $name): void
+    {
+        array_pop($this->_var_aliases[$name]);
+        if (!$this->_var_aliases[$name]) {
+            unset($this->_var_aliases[$name]);
+        }
+    }
+
+    /**
+     * Hide every alias while compiling a body that becomes its own PHP scope
+     * (a recursive macro closure), where the local temporaries do not exist.
+     *
+     * @return array<string, string[]> state to hand back to restoreVarAliases()
+     */
+    public function suspendVarAliases(): array
+    {
+        $saved = $this->_var_aliases;
+        $this->_var_aliases = [];
+        return $saved;
+    }
+
+    /**
+     * @param array<string, string[]> $saved
+     */
+    public function restoreVarAliases(array $saved): void
+    {
+        $this->_var_aliases = $saved;
+    }
+
+    /**
+     * PHP expression that reads a template variable.
+     */
+    public function getVarAccess(string $name): string
+    {
+        if (isset($this->_var_aliases[$name])) {
+            return end($this->_var_aliases[$name]);
+        }
+        return '$var["' . $name . '"]';
+    }
+
+    /**
      * Parse variable name: $a, $a.b, $a.b['c'], $a:index
      * @param Tokenizer $tokens
      * @param string|null $var
@@ -993,7 +1096,7 @@ class Template extends Render
                     throw new UnexpectedTokenException($tokens);
                 }
             } else {
-                $var = '$var["' . substr($tokens->get(T_VARIABLE), 1) . '"]';
+                $var = $this->getVarAccess(substr($tokens->get(T_VARIABLE), 1));
                 $tokens->next();
             }
         }
@@ -1001,7 +1104,7 @@ class Template extends Render
             if ($t === ".") {
                 $tokens->next();
                 if ($tokens->is(T_VARIABLE)) {
-                    $key = '[ $var["' . substr($tokens->getAndNext(), 1) . '"] ]';
+                    $key = '[ ' . $this->getVarAccess(substr($tokens->getAndNext(), 1)) . ' ]';
                 } elseif ($tokens->is(Tokenizer::MACRO_STRING)) {
                     $key = '["' . $tokens->getAndNext() . '"]';
                 } elseif ($tokens->is(Tokenizer::MACRO_SCALAR)) {
@@ -1054,6 +1157,11 @@ class Template extends Render
     public function parseAccessor(Tokenizer $tokens, ?bool &$is_var = false): string
     {
         $accessor = $tokens->need('$')->next()->need('.')->next()->current();
+        if ($this->_options & pbFenom::DENY_ACCESSOR) {
+            // DENY_ACCESSOR used to be declared and mapped in setOptions() but never
+            // checked anywhere, so `disable_accessor` silently enforced nothing.
+            throw new \LogicException("Accessor \$.$accessor is disabled");
+        }
         $parser   = $this->getStorage()->getAccessor($accessor);
         $is_var   = false;
         if ($parser) {
@@ -1199,7 +1307,7 @@ class Template extends Render
             "string" => 'is_int(strpos(%2$s, %1$s))',
             "list"   => "in_array(%s, %s)",
             "keys"   => "array_key_exists(%s, %s)",
-            "auto"   => '\Fenom\Modifier::in(%s, %s)'
+            "auto"   => '\pbFenom\Modifier::in(%s, %s)'
         );
         $checker  = null;
         $invert   = '';
@@ -1309,6 +1417,9 @@ class Template extends Render
                     } else {
                         $_str = "";
                     }
+                    // NB: this is spliced into a double-quoted PHP string literal, where
+                    // PHP's own interpolation resolves it — a local alias would render as
+                    // "Array". Always use the canonical $var[...] form here.
                     $_str .= '$var["' . substr($tokens->current(), 1) . '"]';
                     $tokens->next();
                     if ($tokens->is($stop)) {
@@ -1479,7 +1590,9 @@ class Template extends Render
             if ($recursive instanceof Tag) {
                 $recursive['recursive'] = true;
             }
-            return '$tpl->getMacro("' . $name . '")->__invoke(' . Compiler::toArray($args) . ', $tpl);';
+            // var_export, not naive quoting: the macro name used to be spliced into a
+            // double-quoted PHP literal unescaped
+            return '$tpl->callMacro(' . var_export($name, true) . ', ' . Compiler::toArray($args) . ');';
         } else {
             $vars = $this->tmpVar();
             return $vars . ' = $var; $var = ' . Compiler::toArray($args) . ';' . PHP_EOL . '?>' .
@@ -1491,11 +1604,11 @@ class Template extends Render
      * @param Tokenizer $tokens
      * @throws \LogicException
      * @throws \RuntimeException
-     * @return callable
+     * @return string
      */
-    public function parseStatic(Tokenizer $tokens): callable
+    public function parseStatic(Tokenizer $tokens): string
     {
-        if ($this->_options & Fenom::DENY_STATICS) {
+        if ($this->_options & pbFenom::DENY_STATICS) {
             throw new \LogicException("Static methods are disabled");
         }
         $tokens->skipIf("\\");

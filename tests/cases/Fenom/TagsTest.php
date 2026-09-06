@@ -1,6 +1,6 @@
 <?php
 
-namespace Fenom;
+namespace pbFenom;
 
 
 class TagsTest extends TestCase
@@ -8,10 +8,10 @@ class TagsTest extends TestCase
     /**
      * @group test-for
      */
-//    public function testFor()
-//    {
-//        $this->assertRender('{for $i=0 to=3}{$i},{/for}', "0,1,2,3,");
-//    }
+    public function testFor()
+    {
+        $this->assertRender('{for $i=0 to=3}{$i},{/for}', "0,1,2,3,");
+    }
 
     /**
      * @dataProvider providerScalars

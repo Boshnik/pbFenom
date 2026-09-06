@@ -1,7 +1,7 @@
 <?php
-namespace Fenom;
+namespace pbFenom;
 
-use Fenom, Fenom\TestCase;
+use pbFenom, pbFenom\TestCase;
 
 class ExtendsTest extends TestCase
 {
@@ -23,21 +23,21 @@ class ExtendsTest extends TestCase
         return array(
             array(
                 '{extends "extends/dynamic/child.3.tpl"} {extends "extends/dynamic/child.3.tpl"}',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Only one {extends} allowed"
             ),
             array(
                 '{if true}{extends "extends/dynamic/child.3.tpl"}{/if}',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Tag {extends} can not be nested"
             ),
             array(
                 '{if true}{use "extends/dynamic/use.tpl"}{/if}',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Tag {use} can not be nested"
             ),
-            array('{use $use_this}', 'Fenom\Error\CompileException', "Invalid template name for tag {use}"),
-            array('{block $use_this}{/block}', 'Fenom\Error\CompileException', "Invalid block name"),
+            array('{use $use_this}', 'pbFenom\Error\CompileException', "Invalid template name for tag {use}"),
+            array('{block $use_this}{/block}', 'pbFenom\Error\CompileException', "Invalid block name"),
         );
     }
 

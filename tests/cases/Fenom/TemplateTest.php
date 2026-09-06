@@ -1,14 +1,14 @@
 <?php
-namespace Fenom;
+namespace pbFenom;
 
-use Fenom\Template,
-    Fenom,
-    Fenom\Render;
+use pbFenom\Template,
+    pbFenom,
+    pbFenom\Render;
 
 /**
  * Test template parsing
  *
- * @package Fenom
+ * @package pbFenom
  */
 class TemplateTest extends TestCase
 {
@@ -107,7 +107,7 @@ class TemplateTest extends TestCase
             array('hello, {"W{$a}d"}!', $a, 'hello, WWorldd!'),
             array('hello, {$world->chunk(1)->self->chunk("new")}!', $b, 'hello, world!'),
             array('hello, {!$world->chunk(1)->self->chunk("new")}!', $b, 'hello, !'),
-            array(':: {Fenom\Helper::method()->page->title} ::', $b, ':: test page ::'),
+            array(':: {pbFenom\Helper::method()->page->title} ::', $b, ':: test page ::'),
         );
     }
 
@@ -127,20 +127,20 @@ class TemplateTest extends TestCase
     public static function providerVarsInvalid()
     {
         return array(
-            array('hello, {$a.}!', 'Fenom\Error\CompileException', "Unexpected end of expression"),
-            array('hello, {$b[}!', 'Fenom\Error\CompileException', "Unexpected end of expression"),
-            array('hello, {$b.}!', 'Fenom\Error\CompileException', "Unexpected end of expression"),
-            array('hello, {$b[c}!', 'Fenom\Error\CompileException', "Unexpected end of expression"),
-            array('hello, {$b.c]}!', 'Fenom\Error\CompileException', "Unexpected token ']'"),
-            array('hello, {$b[ ]}!', 'Fenom\Error\CompileException', "Unexpected end of expression"),
-            array('hello, {$b[9/].c}!', 'Fenom\Error\CompileException', "Unexpected token ']'"),
-            array('hello, {$b[3]$c}!', 'Fenom\Error\CompileException', "Unexpected token '\$c'"),
-            array('hello, {$b[3]c}!', 'Fenom\Error\CompileException', "Unexpected token 'c'"),
+            array('hello, {$a.}!', 'pbFenom\Error\CompileException', "Unexpected end of expression"),
+            array('hello, {$b[}!', 'pbFenom\Error\CompileException', "Unexpected end of expression"),
+            array('hello, {$b.}!', 'pbFenom\Error\CompileException', "Unexpected end of expression"),
+            array('hello, {$b[c}!', 'pbFenom\Error\CompileException', "Unexpected end of expression"),
+            array('hello, {$b.c]}!', 'pbFenom\Error\CompileException', "Unexpected token ']'"),
+            array('hello, {$b[ ]}!', 'pbFenom\Error\CompileException', "Unexpected end of expression"),
+            array('hello, {$b[9/].c}!', 'pbFenom\Error\CompileException', "Unexpected token ']'"),
+            array('hello, {$b[3]$c}!', 'pbFenom\Error\CompileException', "Unexpected token '\$c'"),
+            array('hello, {$b[3]c}!', 'pbFenom\Error\CompileException', "Unexpected token 'c'"),
             array(
                 'hello, {$b.obj->valid()}!',
-                'Fenom\Error\SecurityException',
+                'pbFenom\Error\SecurityException',
                 "Forbidden to call methods",
-                Fenom::DENY_METHODS
+                pbFenom::DENY_METHODS
             ),
         );
     }
@@ -169,13 +169,13 @@ class TemplateTest extends TestCase
             array('hello, {$b["C"|lower]|upper}!', $b, 'hello, USERNAME!'),
             array('Mod: {$rescue|escape}!', $b, 'Mod: Chip &amp; Dale!'),
             array('Mod: {$rescue|escape:"html"}!', $b, 'Mod: Chip &amp; Dale!'),
-            array('Mod: {$rescue|escape:"url"}!', $b, 'Mod: Chip+%26+Dale!'),
-            array('Mod: {$rescue|escape:"unknown"}!', $b, 'Mod: Chip & Dale!'),
-            array('Mod: {$rescue|escape:"js"}!', $b, 'Mod: "Chip & Dale"!'),
+            array('Mod: {$rescue|escape:"url"}!', $b, 'Mod: Chip%20%26%20Dale!'),
+            array('Mod: {$rescue|escape:"query"}!', $b, 'Mod: Chip+%26+Dale!'),
+            array('Mod: {$rescue|escape:"attr"}!', $b, 'Mod: Chip &amp; Dale!'),
+            array('Mod: {$rescue|escape:"js"}!', $b, 'Mod: "Chip \\u0026 Dale"!'),
             array('Mod: {$rescue_html|unescape}!', $b, 'Mod: Chip & Dale!'),
             array('Mod: {$rescue_html|unescape:"html"}!', $b, 'Mod: Chip & Dale!'),
-            array('Mod: {$rescue_url|unescape:"url"}!', $b, 'Mod: Chip & Dale!'),
-            array('Mod: {$rescue|unescape:"unknown"}!', $b, 'Mod: Chip & Dale!'),
+            array('Mod: {$rescue_url|unescape:"query"}!', $b, 'Mod: Chip & Dale!'),
             array('Mod: {$time|date_format:"%Y %m %d"}!', $b, 'Mod: 2012 07 26!'),
             array('Mod: {$date|date_format:"%Y %m %d"}!', $b, 'Mod: 2012 07 26!'),
             array('Mod: {$time|date:"Y m d"}!', $b, 'Mod: 2012 07 26!'),
@@ -190,17 +190,17 @@ class TemplateTest extends TestCase
     public static function providerModifiersInvalid()
     {
         return array(
-            array('Mod: {$lorem|}!', 'Fenom\Error\CompileException', "Unexpected end of expression"),
+            array('Mod: {$lorem|}!', 'pbFenom\Error\CompileException', "Unexpected end of expression"),
             array(
                 'Mod: {$lorem|str_rot13}!',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Modifier str_rot13 not found",
-                Fenom::DENY_NATIVE_FUNCS
+                pbFenom::DENY_NATIVE_FUNCS
             ),
-            array('Mod: {$lorem|my_encode}!', 'Fenom\Error\CompileException', "Modifier my_encode not found"),
-            array('Mod: {$lorem|truncate:}!', 'Fenom\Error\CompileException', "Unexpected end of expression"),
-            array('Mod: {$lorem|truncate:abs}!', 'Fenom\Error\CompileException', "Unexpected token 'abs'"),
-            array('Mod: {$lorem|truncate:80|}!', 'Fenom\Error\CompileException', "Unexpected end of expression"),
+            array('Mod: {$lorem|my_encode}!', 'pbFenom\Error\CompileException', "Modifier my_encode not found"),
+            array('Mod: {$lorem|truncate:}!', 'pbFenom\Error\CompileException', "Unexpected end of expression"),
+            array('Mod: {$lorem|truncate:abs}!', 'pbFenom\Error\CompileException', "Unexpected token 'abs'"),
+            array('Mod: {$lorem|truncate:80|}!', 'pbFenom\Error\CompileException', "Unexpected end of expression"),
         );
     }
 
@@ -249,22 +249,22 @@ class TemplateTest extends TestCase
     public static function providerExpressionsInvalid()
     {
         return array(
-            array('If: {-"hi"} end', 'Fenom\Error\CompileException', "Unexpected token '-'"),
-            array('If: {-[1,2]} end', 'Fenom\Error\CompileException', "Unexpected token '-'"),
-            array('If: {($a++)++} end', 'Fenom\Error\CompileException', "Unexpected token '++'"),
-            array('If: {$a + * $c} end', 'Fenom\Error\CompileException', "Unexpected token '*'"),
-            array('If: {$a + } end', 'Fenom\Error\CompileException', "Unexpected end of expression"),
-            array('If: {$a + =} end', 'Fenom\Error\CompileException', "Unexpected token '='"),
-            array('If: {$a + 1 =} end', 'Fenom\Error\CompileException', "Unexpected token '='"),
-            array('If: {$a + 1 = 6} end', 'Fenom\Error\CompileException', "Unexpected token '='"),
-            array('If: {/$a} end', 'Fenom\Error\CompileException', "Unexpected token '\$a'"),
-            array('If: {$a == 5 > 4} end', 'Fenom\Error\CompileException', "Unexpected token '>'"),
-            array('If: {$a != 5 <= 4} end', 'Fenom\Error\CompileException', "Unexpected token '<='"),
-            array('If: {$a != 5 => 4} end', 'Fenom\Error\CompileException', "Unexpected token '=>'"),
-            array('If: {$a + (*6)} end', 'Fenom\Error\CompileException', "Unexpected token '*'"),
-            array('If: {$a + ( 6} end', 'Fenom\Error\CompileException', "Unexpected end of expression, expect ')'"),
-            array('If: {$a end', 'Fenom\Error\CompileException', "Unclosed tag in line"),
-            array('If: {!!$a}', 'Fenom\Error\CompileException', "Unexpected token '!'"),
+            array('If: {-"hi"} end', 'pbFenom\Error\CompileException', "Unexpected token '-'"),
+            array('If: {-[1,2]} end', 'pbFenom\Error\CompileException', "Unexpected token '-'"),
+            array('If: {($a++)++} end', 'pbFenom\Error\CompileException', "Unexpected token '++'"),
+            array('If: {$a + * $c} end', 'pbFenom\Error\CompileException', "Unexpected token '*'"),
+            array('If: {$a + } end', 'pbFenom\Error\CompileException', "Unexpected end of expression"),
+            array('If: {$a + =} end', 'pbFenom\Error\CompileException', "Unexpected token '='"),
+            array('If: {$a + 1 =} end', 'pbFenom\Error\CompileException', "Unexpected token '='"),
+            array('If: {$a + 1 = 6} end', 'pbFenom\Error\CompileException', "Unexpected token '='"),
+            array('If: {/$a} end', 'pbFenom\Error\CompileException', "Unexpected token '\$a'"),
+            array('If: {$a == 5 > 4} end', 'pbFenom\Error\CompileException', "Unexpected token '>'"),
+            array('If: {$a != 5 <= 4} end', 'pbFenom\Error\CompileException', "Unexpected token '<='"),
+            array('If: {$a != 5 => 4} end', 'pbFenom\Error\CompileException', "Unexpected token '=>'"),
+            array('If: {$a + (*6)} end', 'pbFenom\Error\CompileException', "Unexpected token '*'"),
+            array('If: {$a + ( 6} end', 'pbFenom\Error\CompileException', "Unexpected end of expression, expect ')'"),
+            array('If: {$a end', 'pbFenom\Error\CompileException', "Unclosed tag in line"),
+            array('If: {!!$a}', 'pbFenom\Error\CompileException', "Unexpected token '!'"),
         );
     }
 
@@ -272,15 +272,15 @@ class TemplateTest extends TestCase
     public static function providerIncludeInvalid()
     {
         return array(
-            array('Include {include} template', 'Fenom\Error\CompileException', "Unexpected end of expression"),
+            array('Include {include} template', 'pbFenom\Error\CompileException', "Unexpected end of expression"),
             array(
                 'Include {include another="welcome.tpl"} template',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected token 'another'"
             ),
             array(
                 'Include {include "../../TestCase.php"} template',
-                'Fenom\Error\SecurityException',
+                'pbFenom\Error\SecurityException',
                 "Template ../../TestCase.php not found"
             ),
         );
@@ -307,50 +307,50 @@ class TemplateTest extends TestCase
     public static function providerInsertInvalid()
     {
         return array(
-            array('Include {insert} template', 'Fenom\Error\CompileException', "Unexpected end of expression"),
+            array('Include {insert} template', 'pbFenom\Error\CompileException', "Unexpected end of expression"),
             array(
                 'Include {insert another="welcome.tpl"} template',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected token 'another'"
             ),
             array(
                 'Include {insert $tpl} template',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Tag {insert} accept only static template name"
             ),
             array(
                 'Include {insert "$tpl"} template',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Tag {insert} accept only static template name"
             ),
             array(
                 'Include {insert "{$tpl}"} template',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Tag {insert} accept only static template name"
             ),
             array(
                 'Include {insert "$name.tpl"} template',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Tag {insert} accept only static template name"
             ),
             array(
                 'Include {insert "{$name}.tpl"} template',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Tag {insert} accept only static template name"
             ),
             array(
                 'Include {insert "{$pr_name|lower}.tpl"} template',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Tag {insert} accept only static template name"
             ),
             array(
                 'Include {insert "wel{$fragment}.tpl"} template',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Tag {insert} accept only static template name"
             ),
             array(
                 'Include {insert "welcome.tpl" email="flame@dev.null"} template',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected token 'email'"
             ),
         );
@@ -403,28 +403,28 @@ class TemplateTest extends TestCase
                 $a,
                 'if: block1 end'
             ),
-            array('if: {if $unexist} block1 {else} block2 {/if} end', $a, 'if: block2 end', Fenom::FORCE_VERIFY),
-            array('if: {if !$unexist} block1 {else} block2 {/if} end', $a, 'if: block1 end', Fenom::FORCE_VERIFY),
+            array('if: {if $unexist} block1 {else} block2 {/if} end', $a, 'if: block2 end', pbFenom::FORCE_VERIFY),
+            array('if: {if !$unexist} block1 {else} block2 {/if} end', $a, 'if: block1 end', pbFenom::FORCE_VERIFY),
         );
     }
 
     public static function providerIfInvalid()
     {
         return array(
-            array('If: {if} block1 {/if} end', 'Fenom\Error\CompileException', "Unexpected end of expression"),
+            array('If: {if} block1 {/if} end', 'pbFenom\Error\CompileException', "Unexpected end of expression"),
             array(
                 'If: {if 1} block1 {elseif} block2 {/if} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected end of expression"
             ),
             array(
                 'If: {if 1} block1 {else} block2 {elseif 0} block3 {/if} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Incorrect use of the tag {elseif}"
             ),
             array(
                 'If: {if 1} block1 {else} block2 {/if} block3 {elseif 0} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected tag 'elseif' (this tag can be used with 'if')"
             ),
         );
@@ -486,60 +486,60 @@ class TemplateTest extends TestCase
     public static function providerCreateVarInvalid()
     {
         return array(
-            array('Create: {set $v} Result: {$v} end', 'Fenom\Error\CompileException', "Unclosed tag: {set} opened"),
-            array('Create: {add $v} Result: {$v} end', 'Fenom\Error\CompileException', "Unclosed tag: {add} opened"),
+            array('Create: {set $v} Result: {$v} end', 'pbFenom\Error\CompileException', "Unclosed tag: {set} opened"),
+            array('Create: {add $v} Result: {$v} end', 'pbFenom\Error\CompileException', "Unclosed tag: {add} opened"),
             array(
                 'Create: {set $v = } Result: {$v} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected end of expression"
             ),
-            array('Create: {set $v = 1++} Result: {$v} end', 'Fenom\Error\CompileException', "Unexpected token '++'"),
-            array('Create: {set $v = c} Result: {$v} end', 'Fenom\Error\CompileException', "Unexpected token 'c'"),
+            array('Create: {set $v = 1++} Result: {$v} end', 'pbFenom\Error\CompileException', "Unexpected token '++'"),
+            array('Create: {set $v = c} Result: {$v} end', 'pbFenom\Error\CompileException', "Unexpected token 'c'"),
             array(
                 'Create: {set $v = ($a)++} Result: {$v} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected token '++'"
             ),
             array(
                 'Create: {set $v = --$a++} Result: {$v} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected token '++'"
             ),
             array(
                 'Create: {set $v = $a|upper++} Result: {$v} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected token '++'"
             ),
             array(
                 'Create: {set $v = max($a,2)++} Result: {$v} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected token '++'"
             ),
             array(
                 'Create: {set $v = max($a,2)} Result: {$v} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Function max not found",
-                Fenom::DENY_NATIVE_FUNCS
+                pbFenom::DENY_NATIVE_FUNCS
             ),
             array(
                 'Create: {set $v = 4*} Result: {$v} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected end of expression"
             ),
-            array('Create: {set $v = ""$a} Result: {$v} end', 'Fenom\Error\CompileException', "Unexpected token '\$a'"),
+            array('Create: {set $v = ""$a} Result: {$v} end', 'pbFenom\Error\CompileException', "Unexpected token '\$a'"),
             array(
                 'Create: {set $v = [1,2} Result: {$v} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected end of expression"
             ),
             array(
                 'Create: {set $v = empty(2)} Result: {$v} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected token 2, isset() and empty() accept only variables"
             ),
             array(
                 'Create: {set $v = isset(2)} Result: {$v} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected token 2, isset() and empty() accept only variables"
             ),
 
@@ -666,107 +666,107 @@ class TemplateTest extends TestCase
         return array(
             array(
                 'Foreach: {foreach} {$e}, {/foreach} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected end of expression"
             ),
 //            array(
 //                'Foreach: {foreach $list} {$e}, {/foreach} end',
-//                'Fenom\Error\CompileException',
+//                'pbFenom\Error\CompileException',
 //                "Unexpected end of expression"
 //            ),
 //            array(
 //                'Foreach: {foreach $list+1 as $e} {$e}, {/foreach} end',
-//                'Fenom\Error\CompileException',
+//                'pbFenom\Error\CompileException',
 //                "Unexpected token '+'"
 //            ),
             array(
                 'Foreach: {foreach array_random() as $e} {$e}, {/foreach} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Function array_random not found"
             ),
             array(
                 'Foreach: {foreach $list as $e+1} {$e}, {/foreach} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected token '+'"
             ),
             array(
                 'Foreach: {foreach $list as $k+1 => $e} {$e}, {/foreach} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected token '+'"
             ),
             array(
                 'Foreach: {foreach $list as max($i,1) => $e} {$e}, {/foreach} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected token 'max'"
             ),
             array(
                 'Foreach: {foreach $list as max($e,1)} {$e}, {/foreach} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected token 'max'"
             ),
             array(
                 'Foreach: {foreach $list => $e} {$e}, {/foreach} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected token '=>'"
             ),
             array(
                 'Foreach: {foreach $list $k => $e} {$e}, {/foreach} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected token '\$k'"
             ),
             array(
                 'Foreach: {foreach $list as $k =>} {$e}, {/foreach} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected end of expression"
             ),
             array(
                 'Foreach: {foreach last=$l $list as $e } {$e}, {/foreach} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected token 'last' in expression"
             ),
             array(
                 'Foreach: {foreach $list as $e unknown=1} {$e}, {/foreach} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unknown foreach property 'unknown'"
             ),
             array(
                 'Foreach: {foreach $list as $e index=$i+1} {$e}, {/foreach} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected token '+'"
             ),
             array(
                 'Foreach: {foreach $list as $e first=$f+1} {$e}, {/foreach} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected token '+'"
             ),
             array(
                 'Foreach: {foreach $list as $e last=$l+1} {$e}, {/foreach} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected token '+'"
             ),
             array(
                 'Foreach: {foreach $list as $e index=max($i,1)} {$e}, {/foreach} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected token 'max'"
             ),
             array(
                 'Foreach: {foreach $list as $e first=max($i,1)} {$e}, {/foreach} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected token 'max'"
             ),
             array(
                 'Foreach: {foreach $list as $e last=max($i,1)} {$e}, {/foreach} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected token 'max'"
             ),
             array(
                 'Foreach: {foreach $list as $e} {$e}, {foreachelse} {break} {/foreach} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Improper usage of the tag {break}"
             ),
             array(
                 'Foreach: {foreach $list as $e} {$e}, {foreachelse} {continue} {/foreach} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Improper usage of the tag {continue}"
             ),
         );
@@ -796,17 +796,17 @@ class TemplateTest extends TestCase
         return array(
             array(
                 'Switch: {switch}{case 1} one {/switch} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected end of expression"
             ),
             array(
                 'Switch: {switch 1}{case} one{/switch} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected end of expression"
             ),
             array(
                 'Switch: {switch 1}{case $var} one {/switch} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected token '\$var' in expression"
             ),
         );
@@ -826,7 +826,7 @@ class TemplateTest extends TestCase
     public static function providerWhileInvalid()
     {
         return array(
-            array('While: {while} block {/while} end', 'Fenom\Error\CompileException', "Unexpected end of expression"),
+            array('While: {while} block {/while} end', 'pbFenom\Error\CompileException', "Unexpected end of expression"),
         );
     }
 
@@ -835,32 +835,32 @@ class TemplateTest extends TestCase
         return array(
             array(
                 'Layers: {foreach $list as $e} block1 {if 1} {foreachelse} {/if} {/foreach} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected tag 'foreachelse' (this tag can be used with 'foreach')"
             ),
             array(
                 'Layers: {foreach $list as $e} block1 {if 1}  {/foreach} {/if} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected closing of the tag 'foreach'"
             ),
-            array('Layers: {blah} end', 'Fenom\Error\CompileException', "Unexpected tag 'blah'"),
+            array('Layers: {blah} end', 'pbFenom\Error\CompileException', "Unexpected tag 'blah'"),
             array(
                 'Layers: {foreach 4..6 as $a} block1 {if 1} {foreachelse} {/if} {/foreach} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected tag 'foreachelse' (this tag can be used with 'foreach')"
             ),
             array(
                 'Layers: {foreach 4..6 as $a} block1 {if 1}  {/foreach} {/if} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected closing of the tag 'foreach'"
             ),
             array(
                 'Layers: {switch 1} {if 1} {case 1} {/if} {/switch} end',
-                'Fenom\Error\CompileException',
+                'pbFenom\Error\CompileException',
                 "Unexpected tag 'case' (this tag can be used with 'switch')"
             ),
-            array('Layers: {/switch} end', 'Fenom\Error\CompileException', "Unexpected closing of the tag 'switch'"),
-            array('Layers: {if 1} end', 'Fenom\Error\CompileException', "Unclosed tag: {if}"),
+            array('Layers: {/switch} end', 'pbFenom\Error\CompileException', "Unexpected closing of the tag 'switch'"),
+            array('Layers: {if 1} end', 'pbFenom\Error\CompileException', "Unclosed tag: {if}"),
         );
     }
 
@@ -971,11 +971,11 @@ class TemplateTest extends TestCase
     public static function providerInOperatorInvalid()
     {
         return array(
-            array('{$one not all 3}', 'Fenom\Error\CompileException', "Unexpected token 'not'"),
-            array('{$one in all}', 'Fenom\Error\CompileException', "Unexpected token 'all'"),
-            array('{$one in string [1,2,3]}', 'Fenom\Error\CompileException', "Can not use string operation for array"),
-            array('{$one in list "blah"}', 'Fenom\Error\CompileException', "Can not use array operation for string"),
-            array('{$one in true}', 'Fenom\Error\CompileException', "Unexpected token 'true'"),
+            array('{$one not all 3}', 'pbFenom\Error\CompileException', "Unexpected token 'not'"),
+            array('{$one in all}', 'pbFenom\Error\CompileException', "Unexpected token 'all'"),
+            array('{$one in string [1,2,3]}', 'pbFenom\Error\CompileException', "Can not use string operation for array"),
+            array('{$one in list "blah"}', 'pbFenom\Error\CompileException', "Can not use array operation for string"),
+            array('{$one in true}', 'pbFenom\Error\CompileException', "Unexpected token 'true'"),
         );
     }
 
@@ -998,62 +998,62 @@ class TemplateTest extends TestCase
         );
     }
 
-    public function providerStatic()
+    public static function providerStatic()
     {
         return array(
-//            array('{Fenom\TemplateTest::multi x=3 y=4}', '12'),
-            array('{Fenom\TemplateTest::multi(3,4)}', '12'),
-            array('{12 + Fenom\TemplateTest::multi(3,4)}', '24'),
-            array('{12 + 3|Fenom\TemplateTest::multi:4}', '24'),
+//            array('{pbFenom\TemplateTest::multi x=3 y=4}', '12'),
+            array('{pbFenom\TemplateTest::multi(3,4)}', '12'),
+            array('{12 + pbFenom\TemplateTest::multi(3,4)}', '24'),
+            array('{12 + 3|pbFenom\TemplateTest::multi:4}', '24'),
         );
     }
 
-    public function providerStaticInvalid()
+    public static function providerStaticInvalid()
     {
         return array(
             array(
-                '{Fenom\TemplateTest::multi x=3 y=4}',
-                'Fenom\Error\SecurityException',
+                '{pbFenom\TemplateTest::multi x=3 y=4}',
+                'pbFenom\Error\SecurityException',
                 "Static methods are disabled",
-                Fenom::DENY_STATICS
+                pbFenom::DENY_STATICS
             ),
             array(
-                '{Fenom\TemplateTest::multi(3,4)}',
-                'Fenom\Error\SecurityException',
+                '{pbFenom\TemplateTest::multi(3,4)}',
+                'pbFenom\Error\SecurityException',
                 "Static methods are disabled",
-                Fenom::DENY_STATICS
+                pbFenom::DENY_STATICS
             ),
             array(
-                '{12 + Fenom\TemplateTest::multi(3,4)}',
-                'Fenom\Error\SecurityException',
+                '{12 + pbFenom\TemplateTest::multi(3,4)}',
+                'pbFenom\Error\SecurityException',
                 "Static methods are disabled",
-                Fenom::DENY_STATICS
+                pbFenom::DENY_STATICS
             ),
             array(
-                '{12 + 3|Fenom\TemplateTest::multi:4}',
-                'Fenom\Error\SecurityException',
+                '{12 + 3|pbFenom\TemplateTest::multi:4}',
+                'pbFenom\Error\SecurityException',
                 "Static methods are disabled",
-                Fenom::DENY_STATICS
+                pbFenom::DENY_STATICS
             ),
             array(
-                '{Fenom\TemplateTest::multi_invalid x=3 y=4}',
-                'Fenom\Error\CompileException',
-                'Method Fenom\TemplateTest::multi_invalid doesn\'t exist'
+                '{pbFenom\TemplateTest::multi_invalid x=3 y=4}',
+                'pbFenom\Error\CompileException',
+                'Method pbFenom\TemplateTest::multi_invalid doesn\'t exist'
             ),
             array(
-                '{Fenom\TemplateTest::multi_invalid(3,4)}',
-                'Fenom\Error\CompileException',
-                'Method Fenom\TemplateTest::multi_invalid doesn\'t exist'
+                '{pbFenom\TemplateTest::multi_invalid(3,4)}',
+                'pbFenom\Error\CompileException',
+                'Method pbFenom\TemplateTest::multi_invalid doesn\'t exist'
             ),
             array(
-                '{12 + Fenom\TemplateTest::multi_invalid(3,4)}',
-                'Fenom\Error\CompileException',
-                'Method Fenom\TemplateTest::multi_invalid doesn\'t exist'
+                '{12 + pbFenom\TemplateTest::multi_invalid(3,4)}',
+                'pbFenom\Error\CompileException',
+                'Method pbFenom\TemplateTest::multi_invalid doesn\'t exist'
             ),
             array(
-                '{12 + 3|Fenom\TemplateTest::multi_invalid:4}',
-                'Fenom\Error\CompileException',
-                'Method Fenom\TemplateTest::multi_invalid doesn\'t exist'
+                '{12 + 3|pbFenom\TemplateTest::multi_invalid:4}',
+                'pbFenom\Error\CompileException',
+                'Method pbFenom\TemplateTest::multi_invalid doesn\'t exist'
             ),
         );
     }
@@ -1146,8 +1146,8 @@ class TemplateTest extends TestCase
         $recursive_result2 = 'Include <b>Hello, Flame (dev@null.net)</b> template';
         return array(
             array('Include {include "welcome.tpl"} template', $a, $result),
-            array('Include {include "welcome.tpl"} template', $a, $result, Fenom::FORCE_INCLUDE),
-            array('Include {include "recursive.tpl"} template', $a, $recursive_result, Fenom::FORCE_INCLUDE),
+            array('Include {include "welcome.tpl"} template', $a, $result, pbFenom::FORCE_INCLUDE),
+            array('Include {include "recursive.tpl"} template', $a, $recursive_result, pbFenom::FORCE_INCLUDE),
             array('Include {include $tpl} template', $a, $result),
             array('Include {include "$tpl"} template', $a, $result),
             array('Include {include "{$tpl}"} template', $a, $result),
@@ -1157,14 +1157,14 @@ class TemplateTest extends TestCase
             array('Include {include "wel{$fragment}.tpl"} template', $a, $result),
             array('Include {include "wel{$pr_fragment|lower}.tpl"} template', $a, $result),
             array('Include {include "welcome.tpl" username="Flame"} template', $a, $result2),
-            array('Include {include "welcome.tpl" username="Flame"} template', $a, $result2, Fenom::FORCE_INCLUDE),
-            array('Include {include "recursive.tpl" username="Flame"} template', $a, $recursive_result2, Fenom::FORCE_INCLUDE),
+            array('Include {include "welcome.tpl" username="Flame"} template', $a, $result2, pbFenom::FORCE_INCLUDE),
+            array('Include {include "recursive.tpl" username="Flame"} template', $a, $recursive_result2, pbFenom::FORCE_INCLUDE),
             array('Include {include "welcome.tpl" email="flame@dev.null"} template', $a, $result3),
             array(
                 'Include {include "welcome.tpl" email="flame@dev.null"} template',
                 $a,
                 $result3,
-                Fenom::FORCE_INCLUDE
+                pbFenom::FORCE_INCLUDE
             ),
             array(
                 'Include {include "welcome.tpl" username="Flame" email="flame@dev.null"} template',
@@ -1420,21 +1420,50 @@ class TemplateTest extends TestCase
         $this->execError($code, $exception, $message, $options);
     }
 
+    public static function providerFor()
+    {
+        return array(
+            array('{for $i=0 to=3}{$i},{/for}', array(), '0,1,2,3,'),
+            array('{for $i=0 to=6 step=2}{$i},{/for}', array(), '0,2,4,6,'),
+            array('{for $i=3 to=0 step=-1}{$i},{/for}', array(), '3,2,1,0,'),
+            array('{for $i=$a to=$b}{$i},{/for}', array('a' => 1, 'b' => 3), '1,2,3,'),
+            array('{for $i=0 to=2 index=$k}{$k}:{$i},{/for}', array(), '0:0,1:1,2:2,'),
+            array('{for $i=0 to=2 first=$f}{if $f}[{/if}{$i},{/for}', array(), '[0,1,2,'),
+            array('{for $i=0 to=2 last=$l}{$i}{if $l}!{/if},{/for}', array(), '0,1,2!,'),
+            // {forelse} runs when the loop body never executes
+            array('{for $i=5 to=1}{$i},{forelse}empty{/for}', array(), 'empty'),
+            array('{for $i=1 to=2}{$i},{forelse}empty{/for}', array(), '1,2,'),
+            array('{for $i=0 to=5}{if $i > 2}{break}{/if}{$i},{/for}', array(), '0,1,2,'),
+            array('{for $i=0 to=3}{if $i == 1}{continue}{/if}{$i},{/for}', array(), '0,2,3,'),
+        );
+    }
+
+    public static function providerForInvalid()
+    {
+        return array(
+            // parseTag() wraps compiler exceptions into CompileException with a position
+            array('{for $i=0 to=3 step=0}{$i}{/for}',
+                  'pbFenom\\Error\\CompileException', 'Invalid step value'),
+            array('{for 5 to=3}{$i}{/for}',
+                  'pbFenom\\Error\\CompileException', 'Unexpected token'),
+        );
+    }
+
     /**
      * @dataProvider providerFor
      */
-//    public function testFor($code, $vars, $result)
-//    {
-//        $this->exec($code, $vars, $result);
-//    }
+    public function testFor($code, $vars, $result)
+    {
+        $this->exec($code, $vars, $result);
+    }
 
     /**
      * @dataProvider providerForInvalid
      */
-//    public function testForInvalid($code, $exception, $message, $options = 0)
-//    {
-//        $this->execError($code, $exception, $message, $options);
-//    }
+    public function testForInvalid($code, $exception, $message, $options = 0)
+    {
+        $this->execError($code, $exception, $message, $options);
+    }
 
     /**
      * @group testIgnores

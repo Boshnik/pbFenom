@@ -1,28 +1,29 @@
 <?php
+declare(strict_types=1);
 /*
- * This file is part of Fenom.
+ * This file is part of pbFenom.
  *
  * (c) 2013 Ivan Shalganov
  *
  * For the full copyright and license information, please view the license.md
  * file that was distributed with this source code.
  */
-use Fenom\Error\CompileException;
-use Fenom\Provider;
-use Fenom\ProviderInterface;
-use Fenom\Render;
-use Fenom\Template;
+use pbFenom\Error\CompileException;
+use pbFenom\Provider;
+use pbFenom\ProviderInterface;
+use pbFenom\Render;
+use pbFenom\Template;
 
 /**
- * Fenom Template Engine
+ * pbFenom Template Engine
  *
  *
  * @author     Ivan Shalganov <a.cobest@gmail.com>
  */
-class Fenom
+class pbFenom
 {
-    const VERSION = '3.0';
-    const REV = 2;
+    const VERSION = '3.1';
+    const REV = 0;
     /* Actions */
     const INLINE_COMPILER = 1;
     const BLOCK_COMPILER  = 5;
@@ -39,9 +40,14 @@ class Fenom
     const AUTO_ESCAPE       = 0x200;
     const DISABLE_CACHE     = 0x400;
     const FORCE_VERIFY      = 0x800;
-    const AUTO_TRIM         = 0x1000; // reserved
     const DENY_PHP_CALLS    = 0x2000;
     const AUTO_STRIP        = 0x4000;
+    /**
+     * Emit a `/* name:line: {tag} *\/` comment before every compiled tag.
+     * Useful when reading the cache; off by default because it is ~45% of the
+     * generated file and costs opcache memory for no runtime benefit.
+     */
+    const DEBUG_COMMENTS    = 0x8000;
     /**
      * Use DENY_PHP_CALLS
      * @deprecated
@@ -49,20 +55,39 @@ class Fenom
     const DENY_STATICS      = 0x2000;
 
     /* Default parsers */
-    const DEFAULT_CLOSE_COMPILER = 'Fenom\Compiler::stdClose';
-    const DEFAULT_FUNC_PARSER    = 'Fenom\Compiler::stdFuncParser';
-    const DEFAULT_FUNC_OPEN      = 'Fenom\Compiler::stdFuncOpen';
-    const DEFAULT_FUNC_CLOSE     = 'Fenom\Compiler::stdFuncClose';
-    const SMART_FUNC_PARSER      = 'Fenom\Compiler::smartFuncParser';
+    const DEFAULT_CLOSE_COMPILER = 'pbFenom\Compiler::stdClose';
+    const DEFAULT_FUNC_PARSER    = 'pbFenom\Compiler::stdFuncParser';
+    const DEFAULT_FUNC_OPEN      = 'pbFenom\Compiler::stdFuncOpen';
+    const DEFAULT_FUNC_CLOSE     = 'pbFenom\Compiler::stdFuncClose';
+    const SMART_FUNC_PARSER      = 'pbFenom\Compiler::smartFuncParser';
+    /**
+     * Hands the callback the raw ($params, $tpl, $var) triple instead of mapping the
+     * tag's arguments onto its signature. Was the default before 1.1.0; pass it
+     * explicitly to addFunction() if you want it.
+     */
+    const RAW_FUNC_PARSER        = 'pbFenom\Compiler::stdFuncParser';
 
     const MAX_MACRO_RECURSIVE = 32;
 
+    /**
+     * Bumped whenever the shape of a compiled template changes, so that stale
+     * artifacts from an older pbFenom are not loaded. Part of getSignature().
+     */
+    const CACHE_FORMAT = 2;
+
+    /**
+     * @var int maximum depth of {extends}/{include} nesting before compilation aborts.
+     * Without it a cyclic or self-referencing {extends} spins forever at 100% CPU,
+     * below every PHP limit, and never returns.
+     */
+    public static int $max_template_depth = 32;
+
     const ACCESSOR_CUSTOM   = null;
-    const ACCESSOR_VAR      = 'Fenom\Accessor::parserVar';
-    const ACCESSOR_CALL     = 'Fenom\Accessor::parserCall';
-    const ACCESSOR_PROPERTY = 'Fenom\Accessor::parserProperty';
-    const ACCESSOR_METHOD   = 'Fenom\Accessor::parserMethod';
-    const ACCESSOR_CHAIN    = 'Fenom\Accessor::parserChain';
+    const ACCESSOR_VAR      = 'pbFenom\Accessor::parserVar';
+    const ACCESSOR_CALL     = 'pbFenom\Accessor::parserCall';
+    const ACCESSOR_PROPERTY = 'pbFenom\Accessor::parserProperty';
+    const ACCESSOR_METHOD   = 'pbFenom\Accessor::parserMethod';
+    const ACCESSOR_CHAIN    = 'pbFenom\Accessor::parserChain';
 
     public static string $charset = "UTF-8";
 
@@ -85,10 +110,10 @@ class Fenom
         "force_include"        => self::FORCE_INCLUDE,
         "auto_escape"          => self::AUTO_ESCAPE,
         "force_verify"         => self::FORCE_VERIFY,
-        "auto_trim"            => self::AUTO_TRIM,
         "disable_php_calls"    => self::DENY_PHP_CALLS,
         "disable_statics"      => self::DENY_STATICS,
         "strip"                => self::AUTO_STRIP,
+        "debug_comments"       => self::DEBUG_COMMENTS,
     ];
 
     /**
@@ -117,14 +142,19 @@ class Fenom
     protected array $post_filters = [];
 
     /**
-     * @var Fenom\Render[] Templates storage
+     * @var pbFenom\Render[] Templates storage
      */
     protected array $_storage = [];
 
     /**
      * @var string compile directory
      */
-    protected string $_compile_dir = "/tmp";
+    protected string $_compile_dir = "";
+
+    /**
+     * @var bool skip the world-writable check on the compile directory
+     */
+    protected bool $_allow_shared_compile_dir = false;
 
     /**
      * @var string compile prefix ID template
@@ -142,11 +172,29 @@ class Fenom
     protected int $_options = 0;
 
     /**
+     * @var string|null memoised getSignature() result
+     */
+    private ?string $_signature = null;
+
+    /**
+     * @var int nesting level of the current render. A cyclic {include} otherwise
+     * recurses until PHP exhausts the call stack, which is a *fatal* error:
+     * uncatchable, no context, blank 500. Kept as a plain counter rather than a
+     * stack of names — this is on the per-{include} hot path.
+     */
+    private int $_render_depth = 0;
+
+    /**
+     * @var int nesting level of compile(), for cyclic {insert}
+     */
+    private int $_compile_depth = 0;
+
+    /**
      * @var ProviderInterface
      */
     private ProviderInterface $_provider;
     /**
-     * @var Fenom\ProviderInterface[]
+     * @var pbFenom\ProviderInterface[]
      */
     protected array $_providers = [];
 
@@ -158,24 +206,24 @@ class Fenom
         "up"          => 'strtoupper',
         "lower"       => 'strtolower',
         "low"         => 'strtolower',
-        "date_format" => 'Fenom\Modifier::dateFormat',
-        "date"        => 'Fenom\Modifier::date',
-        "truncate"    => 'Fenom\Modifier::truncate',
-        "escape"      => 'Fenom\Modifier::escape',
-        "e"           => 'Fenom\Modifier::escape', // alias of escape
-        "unescape"    => 'Fenom\Modifier::unescape',
-        "strip"       => 'Fenom\Modifier::strip',
-        "length"      => 'Fenom\Modifier::length',
-        "iterable"    => 'Fenom\Modifier::isIterable',
-        "replace"     => 'Fenom\Modifier::replace',
-        "ereplace"    => 'Fenom\Modifier::ereplace',
-        "match"       => 'Fenom\Modifier::match',
-        "ematch"      => 'Fenom\Modifier::ematch',
-        "split"       => 'Fenom\Modifier::split',
-        "esplit"      => 'Fenom\Modifier::esplit',
-        "join"        => 'Fenom\Modifier::join',
-        "in"          => 'Fenom\Modifier::in',
-        "range"       => 'Fenom\Modifier::range',
+        "date_format" => 'pbFenom\Modifier::dateFormat',
+        "date"        => 'pbFenom\Modifier::date',
+        "truncate"    => 'pbFenom\Modifier::truncate',
+        "escape"      => 'pbFenom\Modifier::escape',
+        "e"           => 'pbFenom\Modifier::escape', // alias of escape
+        "unescape"    => 'pbFenom\Modifier::unescape',
+        "strip"       => 'pbFenom\Modifier::strip',
+        "length"      => 'pbFenom\Modifier::length',
+        "iterable"    => 'pbFenom\Modifier::isIterable',
+        "replace"     => 'pbFenom\Modifier::replace',
+        "ereplace"    => 'pbFenom\Modifier::ereplace',
+        "match"       => 'pbFenom\Modifier::match',
+        "ematch"      => 'pbFenom\Modifier::ematch',
+        "split"       => 'pbFenom\Modifier::split',
+        "esplit"      => 'pbFenom\Modifier::esplit',
+        "join"        => 'pbFenom\Modifier::join',
+        "in"          => 'pbFenom\Modifier::in',
+        "range"       => 'pbFenom\Modifier::range',
     ];
 
     /**
@@ -213,146 +261,146 @@ class Fenom
     protected array $_actions = [
         'foreach'    => [ // {foreach ...} {break} {continue} {foreachelse} {/foreach}
             'type'       => self::BLOCK_COMPILER,
-            'open'       => 'Fenom\Compiler::foreachOpen',
-            'close'      => 'Fenom\Compiler::foreachClose',
+            'open'       => 'pbFenom\Compiler::foreachOpen',
+            'close'      => 'pbFenom\Compiler::foreachClose',
             'tags'       => [
-                'foreachelse' => 'Fenom\Compiler::foreachElse',
-                'break'       => 'Fenom\Compiler::tagBreak',
-                'continue'    => 'Fenom\Compiler::tagContinue',
+                'foreachelse' => 'pbFenom\Compiler::foreachElse',
+                'break'       => 'pbFenom\Compiler::tagBreak',
+                'continue'    => 'pbFenom\Compiler::tagContinue',
             ],
             'float_tags' => ['break' => 1, 'continue' => 1]
         ],
         'if'         => [ // {if ...} {elseif ...} {else} {/if}
             'type'  => self::BLOCK_COMPILER,
-            'open'  => 'Fenom\Compiler::ifOpen',
-            'close' => 'Fenom\Compiler::stdClose',
+            'open'  => 'pbFenom\Compiler::ifOpen',
+            'close' => 'pbFenom\Compiler::stdClose',
             'tags'  => [
-                'elseif' => 'Fenom\Compiler::tagElseIf',
-                'else'   => 'Fenom\Compiler::tagElse'
+                'elseif' => 'pbFenom\Compiler::tagElseIf',
+                'else'   => 'pbFenom\Compiler::tagElse'
             ]
         ],
         'switch'     => [ // {switch ...} {case ..., ...}  {default} {/switch}
             'type'       => self::BLOCK_COMPILER,
-            'open'       => 'Fenom\Compiler::switchOpen',
-            'close'      => 'Fenom\Compiler::switchClose',
+            'open'       => 'pbFenom\Compiler::switchOpen',
+            'close'      => 'pbFenom\Compiler::switchClose',
             'tags'       => [
-                'case'    => 'Fenom\Compiler::tagCase',
-                'default' => 'Fenom\Compiler::tagDefault'
+                'case'    => 'pbFenom\Compiler::tagCase',
+                'default' => 'pbFenom\Compiler::tagDefault'
             ],
             'float_tags' => ['break' => 1]
         ],
         'for'        => [ // {for ...} {break} {continue} {/for}
             'type'       => self::BLOCK_COMPILER,
-            'open'       => 'Fenom\Compiler::forOpen',
-            'close'      => 'Fenom\Compiler::forClose',
+            'open'       => 'pbFenom\Compiler::forOpen',
+            'close'      => 'pbFenom\Compiler::forClose',
             'tags'       => [
-                'forelse'  => 'Fenom\Compiler::forElse',
-                'break'    => 'Fenom\Compiler::tagBreak',
-                'continue' => 'Fenom\Compiler::tagContinue',
+                'forelse'  => 'pbFenom\Compiler::forElse',
+                'break'    => 'pbFenom\Compiler::tagBreak',
+                'continue' => 'pbFenom\Compiler::tagContinue',
             ],
             'float_tags' => ['break' => 1, 'continue' => 1]
         ],
         'while'      => [ // {while ...} {break} {continue} {/while}
             'type'       => self::BLOCK_COMPILER,
-            'open'       => 'Fenom\Compiler::whileOpen',
-            'close'      => 'Fenom\Compiler::stdClose',
+            'open'       => 'pbFenom\Compiler::whileOpen',
+            'close'      => 'pbFenom\Compiler::stdClose',
             'tags'       => [
-                'break'    => 'Fenom\Compiler::tagBreak',
-                'continue' => 'Fenom\Compiler::tagContinue',
+                'break'    => 'pbFenom\Compiler::tagBreak',
+                'continue' => 'pbFenom\Compiler::tagContinue',
             ],
             'float_tags' => ['break' => 1, 'continue' => 1]
         ],
         'include'    => [ // {include ...}
             'type'   => self::INLINE_COMPILER,
-            'parser' => 'Fenom\Compiler::tagInclude'
+            'parser' => 'pbFenom\Compiler::tagInclude'
         ],
         'insert'     => [ // {include ...}
             'type'   => self::INLINE_COMPILER,
-            'parser' => 'Fenom\Compiler::tagInsert'
+            'parser' => 'pbFenom\Compiler::tagInsert'
         ],
         'var'       => [ // {var ...}
             'type'  => self::BLOCK_COMPILER,
-            'open'  => 'Fenom\Compiler::setOpen',
-            'close' => 'Fenom\Compiler::setClose'
+            'open'  => 'pbFenom\Compiler::setOpen',
+            'close' => 'pbFenom\Compiler::setClose'
         ],
         'set'       => [ // {set ...}
             'type'  => self::BLOCK_COMPILER,
-            'open'  => 'Fenom\Compiler::setOpen',
-            'close' => 'Fenom\Compiler::setClose'
+            'open'  => 'pbFenom\Compiler::setOpen',
+            'close' => 'pbFenom\Compiler::setClose'
         ],
         'add'       => [ // {add ...}
             'type'  => self::BLOCK_COMPILER,
-            'open'  => 'Fenom\Compiler::setOpen',
-            'close' => 'Fenom\Compiler::setClose'
+            'open'  => 'pbFenom\Compiler::setOpen',
+            'close' => 'pbFenom\Compiler::setClose'
         ],
         'do'     => [ // {do ...}
             'type'   => self::INLINE_COMPILER,
-            'parser' => 'Fenom\Compiler::tagDo'
+            'parser' => 'pbFenom\Compiler::tagDo'
         ],
         'block'      => [ // {block ...} {parent} {/block}
             'type'       => self::BLOCK_COMPILER,
-            'open'       => 'Fenom\Compiler::tagBlockOpen',
-            'close'      => 'Fenom\Compiler::tagBlockClose',
-            'tags'       => ['parent' => 'Fenom\Compiler::tagParent'],
+            'open'       => 'pbFenom\Compiler::tagBlockOpen',
+            'close'      => 'pbFenom\Compiler::tagBlockClose',
+            'tags'       => ['parent' => 'pbFenom\Compiler::tagParent'],
             'float_tags' => ['parent' => 1]
         ],
         'extends'    => [ // {extends ...}
             'type'   => self::INLINE_COMPILER,
-            'parser' => 'Fenom\Compiler::tagExtends'
+            'parser' => 'pbFenom\Compiler::tagExtends'
         ],
         'use'        => [ // {use}
             'type'   => self::INLINE_COMPILER,
-            'parser' => 'Fenom\Compiler::tagUse'
+            'parser' => 'pbFenom\Compiler::tagUse'
         ],
         'filter'     => [ // {filter} ... {/filter}
             'type'  => self::BLOCK_COMPILER,
-            'open'  => 'Fenom\Compiler::filterOpen',
-            'close' => 'Fenom\Compiler::filterClose'
+            'open'  => 'pbFenom\Compiler::filterOpen',
+            'close' => 'pbFenom\Compiler::filterClose'
         ],
         'macro'      => [
             'type'  => self::BLOCK_COMPILER,
-            'open'  => 'Fenom\Compiler::macroOpen',
-            'close' => 'Fenom\Compiler::macroClose'
+            'open'  => 'pbFenom\Compiler::macroOpen',
+            'close' => 'pbFenom\Compiler::macroClose'
         ],
         'import'     => [
             'type'   => self::INLINE_COMPILER,
-            'parser' => 'Fenom\Compiler::tagImport'
+            'parser' => 'pbFenom\Compiler::tagImport'
         ],
         'cycle'      => [
             'type'   => self::INLINE_COMPILER,
-            'parser' => 'Fenom\Compiler::tagCycle'
+            'parser' => 'pbFenom\Compiler::tagCycle'
         ],
         'raw'        => [
             'type'   => self::INLINE_COMPILER,
-            'parser' => 'Fenom\Compiler::tagRaw'
+            'parser' => 'pbFenom\Compiler::tagRaw'
         ],
         'autoescape' => [ // deprecated
             'type'  => self::BLOCK_COMPILER,
-            'open'  => 'Fenom\Compiler::escapeOpen',
-            'close' => 'Fenom\Compiler::nope'
+            'open'  => 'pbFenom\Compiler::escapeOpen',
+            'close' => 'pbFenom\Compiler::nope'
         ],
         'escape' => [
             'type'  => self::BLOCK_COMPILER,
-            'open'  => 'Fenom\Compiler::escapeOpen',
-            'close' => 'Fenom\Compiler::nope'
+            'open'  => 'pbFenom\Compiler::escapeOpen',
+            'close' => 'pbFenom\Compiler::nope'
         ],
         'strip' => [
             'type'  => self::BLOCK_COMPILER,
-            'open'  => 'Fenom\Compiler::stripOpen',
-            'close' => 'Fenom\Compiler::nope'
+            'open'  => 'pbFenom\Compiler::stripOpen',
+            'close' => 'pbFenom\Compiler::nope'
         ],
         'ignore' => [
             'type'  => self::BLOCK_COMPILER,
-            'open'  => 'Fenom\Compiler::ignoreOpen',
-            'close' => 'Fenom\Compiler::nope'
+            'open'  => 'pbFenom\Compiler::ignoreOpen',
+            'close' => 'pbFenom\Compiler::nope'
         ],
         'unset'  => [
             'type'   => self::INLINE_COMPILER,
-            'parser' => 'Fenom\Compiler::tagUnset'
+            'parser' => 'pbFenom\Compiler::tagUnset'
         ],
         'paste'  => [ // {include ...}
             'type'   => self::INLINE_COMPILER,
-            'parser' => 'Fenom\Compiler::tagPaste'
+            'parser' => 'pbFenom\Compiler::tagPaste'
         ],
     ];
 
@@ -377,7 +425,7 @@ class Fenom
         'callable' => 'is_callable(%s)',
         'callback' => 'is_callable(%s)',
         'array'    => 'is_array(%s)',
-        'iterable' => '\Fenom\Modifier::isIterable(%s)',
+        'iterable' => '\pbFenom\Modifier::isIterable(%s)',
         'const'    => 'defined(%s)',
         'template' => '$tpl->getStorage()->templateExists(%s)',
         'empty'    => 'empty(%s)',
@@ -390,42 +438,41 @@ class Fenom
     ];
 
     protected array $_accessors = [
-        'get'     => 'Fenom\Accessor::getVar',
-        'env'     => 'Fenom\Accessor::getVar',
-        'post'    => 'Fenom\Accessor::getVar',
-        'request' => 'Fenom\Accessor::getVar',
-        'cookie'  => 'Fenom\Accessor::getVar',
-        'globals' => 'Fenom\Accessor::getVar',
-        'server'  => 'Fenom\Accessor::getVar',
-        'session' => 'Fenom\Accessor::getVar',
-        'files'   => 'Fenom\Accessor::getVar',
-        'tpl'     => 'Fenom\Accessor::tpl',
-        'version' => 'Fenom\Accessor::version',
-        'const'   => 'Fenom\Accessor::constant',
-        'php'     => 'Fenom\Accessor::call',
-        'call'    => 'Fenom\Accessor::call',
-        'tag'     => 'Fenom\Accessor::Tag',
-        'fetch'   => 'Fenom\Accessor::fetch',
-        'block'   => 'Fenom\Accessor::block',
+        'get'     => 'pbFenom\Accessor::getVar',
+        'env'     => 'pbFenom\Accessor::getVar',
+        'post'    => 'pbFenom\Accessor::getVar',
+        'request' => 'pbFenom\Accessor::getVar',
+        'cookie'  => 'pbFenom\Accessor::getVar',
+        'globals' => 'pbFenom\Accessor::getVar',
+        'server'  => 'pbFenom\Accessor::getVar',
+        'session' => 'pbFenom\Accessor::getVar',
+        'files'   => 'pbFenom\Accessor::getVar',
+        'tpl'     => 'pbFenom\Accessor::tpl',
+        'version' => 'pbFenom\Accessor::version',
+        'const'   => 'pbFenom\Accessor::constant',
+        'php'     => 'pbFenom\Accessor::call',
+        'call'    => 'pbFenom\Accessor::call',
+        'fetch'   => 'pbFenom\Accessor::fetch',
+        'block'   => 'pbFenom\Accessor::block',
     ];
 
     /**
      * Just factory
      *
-     * @param string|Fenom\ProviderInterface $source path to templates or custom provider
+     * @param string|pbFenom\ProviderInterface $source path to templates or custom provider
      * @param string $compile_dir path to compiled files
      * @param int|array $options
      * @throws InvalidArgumentException
-     * @return Fenom
+     * @return static
      */
     public static function factory(
-        string|Fenom\ProviderInterface $source,
-        string $compile_dir = '/tmp',
+        string|pbFenom\ProviderInterface $source,
+        string $compile_dir,
         int|array $options = 0
     ): static
     {
         if (is_string($source)) {
-            $provider = new Fenom\Provider($source);
+            $provider = new pbFenom\Provider($source);
         } else {
             $provider = $source;
         }
@@ -438,9 +485,13 @@ class Fenom
     }
 
     /**
-     * @param Fenom\ProviderInterface $provider
+     * Subclasses may add behaviour but must keep this signature: factory() calls
+     * new static() and cannot know about a widened constructor.
+     *
+     * @final
+     * @param pbFenom\ProviderInterface $provider
      */
-    public function __construct(Fenom\ProviderInterface $provider)
+    public function __construct(pbFenom\ProviderInterface $provider)
     {
         $this->_provider = $provider;
     }
@@ -457,7 +508,27 @@ class Fenom
         if (!is_writable($dir)) {
             throw new LogicException("Cache directory $dir is not writable");
         }
+        // Compiled templates are PHP that gets include()d unconditionally, so the
+        // compile dir is executable code. A world-writable one (the old '/tmp'
+        // default) lets any local user drop in a file under a fully predictable
+        // name and have it run as the web user.
+        if (!$this->_allow_shared_compile_dir
+            && ($perms = @fileperms($dir)) !== false && ($perms & 0002)) {
+            throw new LogicException(
+                "Cache directory $dir is world-writable; compiled templates are executed as PHP. "
+                . "Use a private directory, or call allowSharedCompileDir() if this is intentional."
+            );
+        }
         $this->_compile_dir = $dir;
+        return $this;
+    }
+
+    /**
+     * Opt out of the world-writable compile-directory check.
+     */
+    public function allowSharedCompileDir(bool $allow = true): static
+    {
+        $this->_allow_shared_compile_dir = $allow;
         return $this;
     }
 
@@ -513,7 +584,7 @@ class Fenom
 
     /**
      * @param callable $cb
-     * @return self
+     * @return static
      */
     public function addFilter(callable $cb): static
     {
@@ -529,7 +600,7 @@ class Fenom
 
     /**
      * @param callable $cb
-     * @return self
+     * @return static
      */
     public function addTagFilter(callable $cb): static
     {
@@ -548,10 +619,11 @@ class Fenom
      *
      * @param string $modifier the modifier name
      * @param callable $callback the modifier callback
-     * @return Fenom
+     * @return static
      */
     public function addModifier(string $modifier, callable $callback): static
     {
+        $this->_resetSignature();
         $this->_modifiers[$modifier] = $callback;
         return $this;
     }
@@ -561,10 +633,11 @@ class Fenom
      *
      * @param string $compiler
      * @param callable $parser
-     * @return Fenom
+     * @return static
      */
     public function addCompiler(string $compiler, callable $parser): static
     {
+        $this->_resetSignature();
         $this->_actions[$compiler] = array(
             'type'   => self::INLINE_COMPILER,
             'parser' => $parser
@@ -580,7 +653,8 @@ class Fenom
     public function addCompilerSmart(string $compiler, string|object $storage): static
     {
         if (method_exists($storage, "tag" . $compiler)) {
-            $this->_actions[$compiler] = array(
+            $this->_resetSignature();
+        $this->_actions[$compiler] = array(
                 'type'   => self::INLINE_COMPILER,
                 'parser' => array($storage, "tag" . $compiler)
             );
@@ -595,7 +669,7 @@ class Fenom
      * @param callable $open_parser
      * @param callable $close_parser
      * @param array $tags
-     * @return Fenom
+     * @return static
      */
     public function addBlockCompiler(
         string $compiler,
@@ -604,6 +678,7 @@ class Fenom
         array $tags = []
     ): static
     {
+        $this->_resetSignature();
         $this->_actions[$compiler] = array(
             'type'  => self::BLOCK_COMPILER,
             'open'  => $open_parser,
@@ -619,7 +694,7 @@ class Fenom
      * @param array $tags
      * @param array $floats
      * @throws LogicException
-     * @return Fenom
+     * @return static
      */
     public function addBlockCompilerSmart(
         string $compiler,
@@ -653,6 +728,7 @@ class Fenom
                 throw new \LogicException("Tag compiler $tag (tag{$compiler}) not found");
             }
         }
+        $this->_resetSignature();
         $this->_actions[$compiler] = $c;
         return $this;
     }
@@ -661,13 +737,18 @@ class Fenom
      * @param string $function
      * @param callable $callback
      * @param callable $parser
-     * @return Fenom
+     * @return static
      */
-    public function addFunction(string $function, callable $callback, callable $parser = self::DEFAULT_FUNC_PARSER): static
+    public function addFunction(string $function, callable $callback, ?callable $parser = null): static
     {
+        $this->_resetSignature();
         $this->_actions[$function] = array(
             'type'     => self::INLINE_FUNCTION,
-            'parser'   => $parser,
+            // Default to the smart parser: the callback's own signature is its template
+            // API, which is what everyone expects. The old default handed the callback
+            // ($params, $tpl, $var) and made writing a function needlessly awkward —
+            // ask for it explicitly with pbFenom::RAW_FUNC_PARSER.
+            'parser'   => $parser ?? self::SMART_FUNC_PARSER,
             'function' => $callback,
         );
         return $this;
@@ -676,10 +757,11 @@ class Fenom
     /**
      * @param string $function
      * @param callable $callback
-     * @return Fenom
+     * @return static
      */
     public function addFunctionSmart(string $function, callable $callback): static
     {
+        $this->_resetSignature();
         $this->_actions[$function] = array(
             'type'     => self::INLINE_FUNCTION,
             'parser'   => self::SMART_FUNC_PARSER,
@@ -693,7 +775,7 @@ class Fenom
      * @param callable $callback
      * @param callable $parser_open
      * @param callable $parser_close
-     * @return Fenom
+     * @return static
      */
     public function addBlockFunction(
         string $function,
@@ -702,6 +784,7 @@ class Fenom
         callable $parser_close = self::DEFAULT_FUNC_CLOSE
     ): static
     {
+        $this->_resetSignature();
         $this->_actions[$function] = array(
             'type'     => self::BLOCK_FUNCTION,
             'open'     => $parser_open,
@@ -713,7 +796,7 @@ class Fenom
 
     /**
      * @param array $funcs
-     * @return Fenom
+     * @return static
      */
     public function addAllowedFunctions(array $funcs): static
     {
@@ -728,6 +811,7 @@ class Fenom
      */
     public function addTest(string $name, string $code): static
     {
+        $this->_resetSignature();
         $this->_tests[$name] = $code;
         return $this;
     }
@@ -749,7 +833,7 @@ class Fenom
      * @param Template|null $template
      * @return callable|null
      */
-    public function getModifier(string $modifier, ?Fenom\Template $template = null): ?callable
+    public function getModifier(string $modifier, ?pbFenom\Template $template = null): ?callable
     {
         if (isset($this->_modifiers[$modifier])) {
             return $this->_modifiers[$modifier];
@@ -766,7 +850,7 @@ class Fenom
      * @param Template $template
      * @return string|null
      */
-    protected function _loadModifier(string $modifier, Fenom\Template $template): ?string
+    protected function _loadModifier(string $modifier, ?pbFenom\Template $template): ?string
     {
         return null;
     }
@@ -790,10 +874,10 @@ class Fenom
     /**
      * Tags autoloader
      * @param string $tag
-     * @param Fenom\Template $template
+     * @param pbFenom\Template $template
      * @return array|null
      */
-    protected function _loadTag(string $tag, Template $template): ?array
+    protected function _loadTag(string $tag, ?Template $template): ?array
     {
         return null;
     }
@@ -841,7 +925,7 @@ class Fenom
      * Add source template provider by scheme
      *
      * @param string $scm scheme name
-     * @param Fenom\ProviderInterface $provider provider object
+     * @param pbFenom\ProviderInterface $provider provider object
      * @param string|null $compile_path
      * @return $this
      */
@@ -882,10 +966,11 @@ class Fenom
      * Add global accessor ($.)
      * @param string $name
      * @param callable $parser
-     * @return Fenom
+     * @return static
      */
     public function addAccessor(string $name, callable $parser): static
     {
+        $this->_resetSignature();
         $this->_accessors[$name] = $parser;
         return $this;
     }
@@ -895,7 +980,7 @@ class Fenom
      * @param string $name
      * @param mixed $accessor
      * @param string $parser
-     * @return Fenom
+     * @return static
      */
     public function addAccessorSmart(string $name, mixed $accessor, string $parser = self::ACCESSOR_VAR): static
     {
@@ -910,7 +995,7 @@ class Fenom
      * Add global accessor handler as callback ($.X)
      * @param string $name
      * @param callable $callback
-     * @return Fenom
+     * @return static
      */
     public function addAccessorCallback(string $name, callable $callback): static
     {
@@ -923,10 +1008,11 @@ class Fenom
     /**
      * Remove accessor
      * @param string $name
-     * @return Fenom
+     * @return static
      */
     public function removeAccessor(string $name): static
     {
+        $this->_resetSignature();
         unset($this->_accessors[$name]);
         return $this;
     }
@@ -967,7 +1053,7 @@ class Fenom
      * @return ProviderInterface
      * @throws InvalidArgumentException
      */
-    public function getProvider(?string $scm = null): Fenom\ProviderInterface
+    public function getProvider(?string $scm = null): pbFenom\ProviderInterface
     {
         if ($scm) {
             if (isset($this->_providers[$scm])) {
@@ -983,7 +1069,7 @@ class Fenom
     /**
      * Return empty template
      *
-     * @return Fenom\Template
+     * @return pbFenom\Template
      */
     public function getRawTemplate(?Template $parent = null): Template
     {
@@ -1041,7 +1127,7 @@ class Fenom
      *
      * @param string|array $template template name with schema
      * @param int $options additional options and flags
-     * @return Fenom\Render
+     * @return pbFenom\Render
      * @throws CompileException
      */
     public function getTemplate(string|array $template, int $options = 0): Render
@@ -1053,7 +1139,7 @@ class Fenom
             $key = $options . "@" . $template;
         }
         if (isset($this->_storage[$key])) {
-            /** @var Fenom\Template $tpl */
+            /** @var pbFenom\Template $tpl */
             $tpl = $this->_storage[$key];
             if (($this->_options & self::AUTO_RELOAD) && !$tpl->isValid()) {
                 $compiled = $this->compile($template, true, $options);
@@ -1062,7 +1148,16 @@ class Fenom
                 return $tpl;
             }
         } elseif ($this->_options & (self::FORCE_COMPILE | self::DISABLE_CACHE)) {
-            return $this->compile($template, !($this->_options & self::DISABLE_CACHE), $options);
+            $store    = !($this->_options & self::DISABLE_CACHE);
+            $compiled = $this->compile($template, $store, $options);
+            if ($store) {
+                // FORCE_COMPILE writes the artifact and then used to ignore it, rendering
+                // through eval() instead. Including the file we just wrote skips the eval
+                // and lets opcache keep the compiled opcodes. Only DISABLE_CACHE, which
+                // by definition has no file, still needs eval().
+                return $this->_load($template, $options, $compiled);
+            }
+            return $compiled;
         } else {
             return $this->_storage[$key] = $this->_load($template, $options);
         }
@@ -1094,7 +1189,7 @@ class Fenom
      *
      * @param string[]|string $template
      * @param int $opts
-     * @return Fenom\Render
+     * @return pbFenom\Render
      * @throws CompileException
      */
     protected function _load(array|string $template, int $opts, ?Template $compiled = null): Render
@@ -1108,28 +1203,100 @@ class Fenom
             $scm = $provider;
         }
         $compile_dir = $this->getCompileDir($scm);
-        $file_name = $this->getCompileName($template, $opts);
-        $tpl = null;
-        if (!is_file($compile_dir . "/" . $file_name)) {
-            $tpl = $this->compile($template, true, $opts);
-        }
-        if (is_file($compile_dir . "/" . $file_name)) {
-            $fenom = $this; // used in template
-            $_tpl  = include($compile_dir . "/" . $file_name);
-            /* @var Fenom\Render $_tpl */
+        $file_name   = $this->getCompileName($template, $opts);
+        $path        = $compile_dir . "/" . $file_name;
+        $auto_reload = (bool)($this->_options & self::AUTO_RELOAD);
 
-            if (!($this->_options & self::AUTO_RELOAD) || ($this->_options & self::AUTO_RELOAD)
-                && $_tpl instanceof Fenom\Render
-                && $_tpl->isValid()) {
+        if (is_file($path)) {
+            $fenom = $this; // used in template
+            $_tpl  = include($path);
+            /* @var pbFenom\Render $_tpl */
+            if ($_tpl instanceof pbFenom\Render && (!$auto_reload || $_tpl->isValid())) {
                 return $_tpl;
-            } else if ($tpl) {
-                return $tpl;
-            } else if ($compiled) {
+            }
+            // Stale (or unreadable) cache. This used to fall through to the exception
+            // below unless the caller happened to pass an already-compiled template,
+            // so under AUTO_RELOAD the first request after a template edit died with
+            // "failed to store cache" and kept dying until the cache was cleared.
+            if ($compiled) {
                 return $compiled;
             }
         }
-        throw new CompileException("failed to store cache of " . var_export($template, true) .
-            " to {$file_name}");
+
+        $tpl = $this->compile($template, true, $opts);
+        if (is_file($path)) {
+            $fenom = $this;
+            $_tpl  = include($path);
+            if ($_tpl instanceof pbFenom\Render) {
+                return $_tpl;
+            }
+        }
+        return $tpl;
+    }
+
+    /**
+     * Enter a template at render time, refusing to nest deeper than
+     * pbFenom::$max_template_depth.
+     *
+     * @throws pbFenom\Error\TemplateException
+     */
+    public function enterRender(string $name): void
+    {
+        if (++$this->_render_depth > self::$max_template_depth) {
+            $this->_render_depth = 0;
+            throw new pbFenom\Error\TemplateException(
+                "Template nesting is too deep (" . self::$max_template_depth . ") at `$name`, "
+                . "probably a cyclic {include}"
+            );
+        }
+    }
+
+    /**
+     * Leave the innermost template entered by enterRender().
+     */
+    public function leaveRender(): void
+    {
+        if ($this->_render_depth > 0) {
+            $this->_render_depth--;
+        }
+    }
+
+    /**
+     * Fingerprint of everything that can change generated code.
+     *
+     * The compile cache used to be keyed on name + option mask only, so two Fenom
+     * instances sharing a compile directory but configured with different modifiers,
+     * tags, accessors or charset silently served each other's compiled templates.
+     * Only string callables are included: closures compile to a runtime
+     * call_user_func() and therefore do not end up baked into the artifact
+     * (and could not be hashed stably across processes anyway).
+     *
+     * @return string
+     */
+    public function getSignature(): string
+    {
+        if ($this->_signature === null) {
+            $parts = ['charset' => self::$charset, 'format' => self::CACHE_FORMAT];
+            foreach (['_modifiers' => $this->_modifiers, '_tests' => $this->_tests] as $key => $set) {
+                $parts[$key] = array_map(
+                    fn($cb) => is_string($cb) ? $cb : '~closure~',
+                    $set
+                );
+            }
+            $parts['_actions']   = array_keys($this->_actions);
+            $parts['_accessors'] = array_keys($this->_accessors);
+            ksort($parts);
+            $this->_signature = substr(hash('sha256', serialize($parts)), 0, 12);
+        }
+        return $this->_signature;
+    }
+
+    /**
+     * Drop the memoised signature after a registry change.
+     */
+    protected function _resetSignature(): void
+    {
+        $this->_signature = null;
     }
 
     /**
@@ -1143,19 +1310,22 @@ class Fenom
     {
         $options = $this->_options | $options;
         if (is_array($tpl)) {
-            $hash = implode(".", $tpl) . ":" . $options;
+            $hash = implode(".", $tpl) . ":" . $options . ":" . $this->getSignature();
             foreach ($tpl as &$t) {
                 $t = urlencode(str_replace(":", "_", basename($t)));
             }
             $tpl = implode("~", $tpl);
         } else {
-            $hash = $tpl . ":" . $options;
+            $hash = $tpl . ":" . $options . ":" . $this->getSignature();
             $tpl = urlencode(str_replace(":", "_", basename($tpl)));
         }
-        if($tpl > self::$filename_length) {
+        if (strlen($tpl) > self::$filename_length) { // was `$tpl > ...`: a string/int compare
             $tpl = sha1($tpl);
         }
-        return $this->_compile_id . $tpl . "." . sprintf("%x.%x.php", crc32($hash), strlen($hash));
+        // crc32 is 32 bits, so two template names collide after ~65k tries and one
+        // compiled template gets served for the other. The readable prefix is kept
+        // for debuggability; uniqueness comes from the digest.
+        return $this->_compile_id . $tpl . "." . substr(hash('sha256', $hash), 0, 32) . ".php";
     }
 
     /**
@@ -1193,6 +1363,30 @@ class Fenom
         }
         $compile_dir = $this->getCompileDir($scm);
 
+        if ($this->_compile_depth >= self::$max_template_depth) {
+            throw new CompileException(
+                "Template nesting is too deep (" . self::$max_template_depth . "), probably a cyclic "
+                . "{insert} at " . var_export($tpl, true)
+            );
+        }
+        $this->_compile_depth++;
+        try {
+            return $this->_compile($tpl, $store, $options, $compile_dir);
+        } finally {
+            $this->_compile_depth--;
+        }
+    }
+
+    /**
+     * @param array|string $tpl
+     * @param bool $store
+     * @param int $options
+     * @param string $compile_dir
+     * @return Template
+     * @throws CompileException
+     */
+    private function _compile(array|string $tpl, bool $store, int $options, string $compile_dir): Template
+    {
         if (is_string($tpl)) {
             $template = $this->getRawTemplate()->load($tpl);
         } else {
@@ -1207,6 +1401,7 @@ class Fenom
             if(!file_put_contents($compile_path, $template->getTemplateCode())) {
                 throw new CompileException("Can't to write to the file $compile_path. Directory " . $compile_dir . " is writable?");
             }
+            @chmod($compile_path, 0640);
             $cache_path = $compile_dir . "/" . $cache_name;
             if (!rename($compile_path, $cache_path)) {
                 unlink($compile_path);
@@ -1243,7 +1438,7 @@ class Fenom
      *
      * @param string $code
      * @param string $name
-     * @return Fenom\Template
+     * @return pbFenom\Template
      */
     public function compileCode(string $code, string $name = 'Runtime compile'): Template
     {
@@ -1270,7 +1465,7 @@ class Fenom
                     $mask &= ~$options[$key];
                 }
             } else {
-                throw new \RuntimeException("Undefined parameter $value");
+                throw new \RuntimeException("Undefined option '$key'");
             }
         }
         return $mask;

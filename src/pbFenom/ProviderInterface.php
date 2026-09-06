@@ -1,17 +1,18 @@
 <?php
+declare(strict_types=1);
 /*
- * This file is part of Fenom.
+ * This file is part of pbFenom.
  *
  * (c) 2013 Ivan Shalganov
  *
  * For the full copyright and license information, please view the license.md
  * file that was distributed with this source code.
  */
-namespace Fenom;
+namespace pbFenom;
 
 /**
  * Interface of templates provider
- * @package Fenom
+ * @package pbFenom
  * @author     Ivan Shalganov <a.cobest@gmail.com>
  */
 interface ProviderInterface

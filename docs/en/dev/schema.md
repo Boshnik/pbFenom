@@ -1,22 +1,22 @@
-How Fenom works
+How pbFenom works
 ===============
 
 ```
 
-use Fenom;
-use Fenom\Render;
-use Fenom\Template;
-use Fenom\Tokenizer;
+use pbFenom;
+use pbFenom\Render;
+use pbFenom\Template;
+use pbFenom\Tokenizer;
 
 ______________________________
 |                            |
-| Fenom::display($tpl, $var) |
+| pbFenom::display($tpl, $var) |
 |____________________________|
               |
               | search the template
 ______________|___________________________
-| Template loaded into Fenom::$_storage? |
-|     Fenom::getTemplate($tpl)           |
+| Template loaded into pbFenom::$_storage? |
+|     pbFenom::getTemplate($tpl)           |
 |________________________________________|
               |                       |
               | yes                   | no
@@ -28,13 +28,13 @@ ______________|__________             |
   | (hot start)                       |
   |     ______________________________|__________________
   |     | Template already compiled and stored in cache |
-  |     | Fenom::getTemplate($template)                 |
+  |     | pbFenom::getTemplate($template)                 |
   |     |_______________________________________________|
   |                 |                              |
   |                 | yes                          | no
   |     ____________|_______________               |
   |     | Load template from cache |   not found   |
-  |     | Fenom::_load(...)        |-------------->|
+  |     | pbFenom::_load(...)        |-------------->|
   |     |__________________________|               |
   |                 |                              |
   |                 | found                        |
@@ -51,7 +51,7 @@ ______________|__________             |
   |                                                |
   |     _____________________________      ________|___________________
   |     | Initialize compiler       |      | Compile the template     |
-  |     | Template::load($tpl)      |<-----| Fenom::compile($tpl)     |
+  |     | Template::load($tpl)      |<-----| pbFenom::compile($tpl)     |
   |     |___________________________|      |__________________________|
   |                 |
   |     ____________|________________
@@ -80,7 +80,7 @@ ______________|__________             |
   |       |      | Detect tag name             |   |   | Detect expression            |   |
   |       |      | Template::parseAct($tokens) |<---   | Template::parseAct($tokens)  |   |
   |       |      | Get callback by tag name    |       | Parse expression             |   |
-  |       |      | Fenom::getTag($tag_name)    |       | Template::parseExpr($tokens) |   |
+  |       |      | pbFenom::getTag($tag_name)    |       | Template::parseExpr($tokens) |   |
   |       |      |_____________________________|       |______________________________|   |
   |       |                   |                                       |                   |
   |       |                   | found                                 |                   |
@@ -101,9 +101,9 @@ ______________|__________             |
   |       |
   |     __|___________________________________
   |     | Store template to cache            |
-  |     | Fenom::compile($tpl)               |
-  |     | Store template to Fenom::$_storage |
-  |     | Fenom::getTemplate($tpl)           |
+  |     | pbFenom::compile($tpl)               |
+  |     | Store template to pbFenom::$_storage |
+  |     | pbFenom::getTemplate($tpl)           |
   |     |____________________________________|
   |                 |
   |     ____________|_____________

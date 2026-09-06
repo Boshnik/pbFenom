@@ -20,7 +20,7 @@ $fenom->addFunction("some_function", function (array $params) { /* ... */ });
 ```
 При необходимости можно переопределить парсер на произвольный:
 ```php
-$fenom->addFunction("some_function", $some_function, function (Fenom\Tokenizer $tokenizer, Fenom\Template $template) { /* parse tag */});
+$fenom->addFunction("some_function", $some_function, function (pbFenom\Tokenizer $tokenizer, pbFenom\Template $template) { /* parse tag */});
 ```
 Существует более простой способ добавления произвольной функции:
 
@@ -64,7 +64,7 @@ $fenom->addBlockFunction('some_block_function', function ($content, array $param
 $fenom->addCompiler(string $compiler, callable $parser);
 ```
 
-Парсер должен принимать `Fenom\Tokenizer $tokenizer`, `Fenom\Template $template` и возвращать PHP код.
+Парсер должен принимать `pbFenom\Tokenizer $tokenizer`, `pbFenom\Template $template` и возвращать PHP код.
 Компилятор так же можно импортировать из класса автоматически
 
 ```php

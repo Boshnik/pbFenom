@@ -1,6 +1,6 @@
 <?php
 
-namespace Fenom;
+namespace pbFenom;
 
 
 class CommentTest extends TestCase
@@ -18,7 +18,7 @@ class CommentTest extends TestCase
 
     public function testError()
     {
-        $this->execError('{* ', 'Fenom\Error\CompileException', "Unclosed comment block in line");
+        $this->execError('{* ', 'pbFenom\Error\CompileException', "Unclosed comment block in line");
     }
 
     /**

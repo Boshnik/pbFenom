@@ -1,7 +1,7 @@
 Develop
 =======
 
-If you want to contribute to Fenom please feel free to create an issue or submit a pull request on Github.
+If you want to contribute to pbFenom please feel free to create an issue or submit a pull request on Github.
 
 There are two branches:
 

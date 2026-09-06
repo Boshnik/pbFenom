@@ -11,55 +11,55 @@ How it work
 
 ## Классы
 
-* `Fenom` - является хранилищем
-    * [шаблонов](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom.php#L88)
-    * [модификаторов](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom.php#L112)
-    * [фильтров](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom.php#L73)
-    * [тегов](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom.php#L140)
-    * [провайдеров](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom.php#L107)
-    * [настройки](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom.php#L98) - маска из [опций](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom.php#L29)
-    * [список](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom.php#L131) разрешенных функций
+* `pbFenom` - является хранилищем
+    * шаблонов
+    * модификаторов
+    * фильтров
+    * тегов
+    * провайдеров
+    * настройки - маска из опций
+    * список разрешенных функций
 
     а также обладает соответсвующими setter-ами и getter-ами для настройки.
-* `Fenom\Tokenizer` -  разбирает, при помощи [tokens_get_all](http://docs.php.net/manual/en/function.token-get-all.php), строку на токены, которые хранит [массивом](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom/Tokenizer.php#L84).
-Обладает методами для обработки токенов, работающими как с [конкретными токенами](http://docs.php.net/manual/en/tokens.php) так и с их [группами](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom/Tokenizer.php#L94).
-* `Fenom\Render` - простейший шаблон. Хранит
-    * `Closure` с [PHP кодом](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom/Render.php#L30) шаблона
-    * [настройки](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom/Render.php#L19)
-    * [зависимости](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom/Render.php#L59)
-* `Fenom\Template` - шаблон с функцией компиляции, расширен от `Fenom\Render`. Содержит различные методы для разбора выражений при помощи `Fenom\Tokenizer`.
-* `Fenom\Compiler` - набор правил разбора различных тегов.
-* `Fenom\Modifier` - набор модификаторов.
-* `Fenom\Scope` - абстрактный уровень блочного тега.
-* `Fenom\ProviderInterface` - интерфейс провадеров шаблонов
-* `Fenom\Provider` - примитивный провайдер шаблонов с файловой системы.
+* `pbFenom\Tokenizer` -  разбирает, при помощи [tokens_get_all](http://docs.php.net/manual/en/function.token-get-all.php), строку на токены, которые хранит массивом.
+Обладает методами для обработки токенов, работающими как с [конкретными токенами](http://docs.php.net/manual/en/tokens.php) так и с их группами.
+* `pbFenom\Render` - простейший шаблон. Хранит
+    * `Closure` с PHP кодом шаблона
+    * настройки
+    * зависимости
+* `pbFenom\Template` - шаблон с функцией компиляции, расширен от `pbFenom\Render`. Содержит различные методы для разбора выражений при помощи `pbFenom\Tokenizer`.
+* `pbFenom\Compiler` - набор правил разбора различных тегов.
+* `pbFenom\Modifier` - набор модификаторов.
+* `pbFenom\Scope` - абстрактный уровень блочного тега.
+* `pbFenom\ProviderInterface` - интерфейс провадеров шаблонов
+* `pbFenom\Provider` - примитивный провайдер шаблонов с файловой системы.
 
 ## Процесс работы
 
-При вызове метода `Fenom::display($template, $vars)` шаблонизатор [ищет](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom.php#L712) в своем хранилище уже загруженный шаблон.
-Если шаблона [нет](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom.php#L727) - либо [загружает](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom.php#L762) код шаблона с файловой системы, либо [инициирует](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom.php#L759) его [компиляцию](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom.php#L788).
+При вызове метода `pbFenom::display($template, $vars)` шаблонизатор ищет в своем хранилище уже загруженный шаблон.
+Если шаблона нет - либо загружает код шаблона с файловой системы, либо инициирует его компиляцию.
 
 ### Компиляция шаблонов
 
-* [Создается](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom.php#L660) "пустой" `Fenom\Template`
-* В него [загружется](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom/Template.php#L157) исходный шаблон [из провайдера](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom/Template.php#L167)
-* Исходный шаблон проходит [pre-фильтры](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom/Template.php#L200).
-* Начинается [разбор](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom/Template.php#L196) исходного шаблона.
-    * [Ищется](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom/Template.php#L204) первый открывающий тег символ - `{`
-    * [Смотрятся](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom/Template.php#L205) следующий за `{` символ.
+* Создается "пустой" `pbFenom\Template`
+* В него загружется исходный шаблон из провайдера
+* Исходный шаблон проходит pre-фильтры.
+* Начинается разбор исходного шаблона.
+    * Ищется первый открывающий тег символ - `{`
+    * Смотрятся следующий за `{` символ.
         * Если `}` или пробельный символ - ищется следующий символ `{`
         * Если `*` - ищется `*}`, текст до которого, в последствии, вырезается.
         * Ищется символ `}`. Полученный фрагмент шаблона считается тегом.
-        * Если [был тег](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom/Template.php#L238) `{ignore}` название тега проверяется на закрытие этого тега.
-        * Для тега [создается](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom/Template.php#L245) токенайзер и отдается в [диспетчер](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom/Template.php#L488) тегов
+        * Если был тег `{ignore}` название тега проверяется на закрытие этого тега.
+        * Для тега создается токенайзер и отдается в диспетчер тегов
         * Диспетчер тега вызывает различные парсеры выражений, компилятор тега и возвращает PHP код (см ниже).
-        * Полученный фрагмент PHP кода [обрабатывается и прикрепляется](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom/Template.php#L362) к коду шаблона.
+        * Полученный фрагмент PHP кода обрабатывается и прикрепляется к коду шаблона.
         * Ищется следующий `{` символ...
         * ...
         * В конце проверяется токенайзер на наличие не используемых токенов, если таковые есть - выбрасывается ошибка.
-    * [Проверяется](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom/Template.php#L264) стек на наличие не закрытых блоковых тегов
-* PHP код проходит [post-фильтры](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom/Template.php#L282)
-* Код шаблона [сохраняется](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom.php#L799) на файлувую систему
+    * Проверяется стек на наличие не закрытых блоковых тегов
+* PHP код проходит post-фильтры
+* Код шаблона сохраняется на файлувую систему
 * Код шаблона выполняется для использования
 
 ### Как работает токенайзер
@@ -75,16 +75,16 @@ How it work
 
 ### Как работает диспетчер тегов
 
-* Проверяет, не является выражение в токенайзере [тегом ignore](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom/Template.php#L492).
-* Проверяет, не является выражение в токенайзере [закрывающим тегом](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom/Template.php#L499).
-* Проверяет, не является выражение в токенайзере [скалярным значением](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom/Template.php#L566).
-* По имени тега из [списка тегов](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom.php#L140) выбирается массив и запускается [соответствующий](https://github.com/bzick/fenom/blob/1.2.2/src/Fenom/Template.php#L582) парсер.
+* Проверяет, не является выражение в токенайзере тегом ignore.
+* Проверяет, не является выражение в токенайзере закрывающим тегом.
+* Проверяет, не является выражение в токенайзере скалярным значением.
+* По имени тега из списка тегов выбирается массив и запускается соответствующий парсер.
 * Парсер возвращает PHP код
 
 ### Как работают парсеры
 
 Парсер всегда получает объект токенайзера. Курсор токенайзера установлен на токен с которого начинается выражение, которое должен разобрать парсер.
 Таким образом, по завершению разбора выражения, парсер должен установить курсор токенайзера на первый незнакомый ему символ.
-Для примера рассмортим парсер переменной `Fenom\Template::parseVar()`.
+Для примера рассмортим парсер переменной `pbFenom\Template::parseVar()`.
 В шаблоне имеется тег {$list.one.c|modifier:1.2}. В парсер будет отдан объект токенайзера `new Tokenizer('$list.one.c|modifier:1.2')` с токенами `$list` `.` `one` `.` `c` `|` `modifier` `:` `1.2`.
-Указатель курсора установлен на токен `$list`. После разбора токенов, курсор будет установлен на `|` так как это не знакомый парсеру переменных токен. Следующий парсер может быть вызван `Fenom\Template::parseModifier()`, который распарсит модификатор.
+Указатель курсора установлен на токен `$list`. После разбора токенов, курсор будет установлен на `|` так как это не знакомый парсеру переменных токен. Следующий парсер может быть вызван `pbFenom\Template::parseModifier()`, который распарсит модификатор.

@@ -1,13 +1,19 @@
 {
-    "name": "fenom/fenom",
+    "name": "pageblocks/fenom",
     "type": "library",
-    "description": "Fenom - excellent template engine for PHP",
-    "keywords": ["fenom", "template", "templating", "templater"],
+    "description": "pbFenom — hardened Fenom fork for PageBlocks (isolated namespace, security fixes, linear-time compiler)",
+    "keywords": [
+        "fenom",
+        "template",
+        "templating",
+        "templater"
+    ],
     "license": "BSD-3-Clause",
     "authors": [
         {
             "name": "Ivan Shalganov",
-            "email": "a.cobest@gmail.com"
+            "email": "a.cobest@gmail.com",
+            "role": "Original author"
         }
     ],
     "require": {
@@ -15,13 +21,20 @@
         "ext-tokenizer": "*"
     },
     "require-dev": {
-        "phpunit/phpunit": "^10.0"
+        "phpunit/phpunit": "^10.0",
+        "phpstan/phpstan": "^2.0"
     },
     "autoload": {
-        "psr-4": { "Fenom\\": "src/Fenom" },
-        "classmap": [ "src/Fenom.php" ]
+        "psr-4": {
+            "pbFenom\\": "src/pbFenom"
+        },
+        "classmap": [
+            "src/pbFenom.php"
+        ]
     },
     "autoload-dev": {
-        "classmap": [ "tests/cases" ]
+        "classmap": [
+            "tests/cases"
+        ]
     }
 }
