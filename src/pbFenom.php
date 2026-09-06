@@ -744,11 +744,11 @@ class pbFenom
         $this->_resetSignature();
         $this->_actions[$function] = array(
             'type'     => self::INLINE_FUNCTION,
-            // Default to the smart parser: the callback's own signature is its template
-            // API, which is what everyone expects. The old default handed the callback
-            // ($params, $tpl, $var) and made writing a function needlessly awkward —
-            // ask for it explicitly with pbFenom::RAW_FUNC_PARSER.
-            'parser'   => $parser ?? self::SMART_FUNC_PARSER,
+            // The callback receives ($params, $tpl, $var). This has been the contract
+            // since 1.x and consumers pass user-supplied callbacks straight through to
+            // here, so changing it breaks third-party code silently — which it did.
+            // For "the signature is the template API", use addFunctionSmart().
+            'parser'   => $parser ?? self::DEFAULT_FUNC_PARSER,
             'function' => $callback,
         );
         return $this;

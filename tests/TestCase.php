@@ -91,9 +91,9 @@ class TestCase extends \PHPUnit\Framework\TestCase
     }
 
 
-    public static function inlineFunction(string $text = "")
+    public static function inlineFunction($params)
     {
-        return $text;
+        return $params["text"] ?? "";
     }
 
     public static function blockFunction($params, $text)

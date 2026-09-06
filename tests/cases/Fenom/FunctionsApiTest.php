@@ -99,7 +99,7 @@ class FunctionsApiTest extends TestCase
         // the same callable registered both ways — two explicit calls, so it is obvious
         // that the second one also claims a tag name
         $fenom->addModifier('excerpt', $excerpt);
-        $fenom->addFunction('excerpt', $excerpt);
+        $fenom->addFunctionSmart('excerpt', $excerpt);
         $this->assertSame($expected, $fenom->compileCode($tpl)->fetch(array('body' => 'one two three four')));
     }
 
@@ -111,7 +111,7 @@ class FunctionsApiTest extends TestCase
         $fenom = $this->fenom(\pbFenom::AUTO_ESCAPE);
         $wrap = fn(string $text, string $tag = 'b'): string => "<$tag>$text</$tag>";
         $fenom->addModifier('wrap', $wrap);
-        $fenom->addFunction('wrap', $wrap);
+        $fenom->addFunctionSmart('wrap', $wrap);
         $vars = array('v' => 'a&b');
 
         $asModifier = $fenom->compileCode('{$v|wrap}')->fetch($vars);
@@ -126,7 +126,7 @@ class FunctionsApiTest extends TestCase
     public function testMissingRequiredArgumentIsReported()
     {
         $fenom = $this->fenom();
-        $fenom->addFunction('needs', fn(string $a, string $b): string => $a . $b);
+        $fenom->addFunctionSmart('needs', fn(string $a, string $b): string => $a . $b);
 
         $this->expectException(Error\CompileException::class);
         $this->expectExceptionMessageMatches("/requires the 'b' argument/");
@@ -164,14 +164,12 @@ class FunctionsApiTest extends TestCase
     /* ------------------------------------------------ addFunction() default */
 
     /**
-     * The natural thing to write - a callable whose signature *is* the template API -
-     * used to fail, because addFunction() defaulted to a parser that handed the
-     * callback ($params, $tpl, $var) instead.
+     * addFunctionSmart() maps the tag's arguments onto the callable's signature.
      */
-    public function testAddFunctionUsesTheCallableSignatureByDefault()
+    public function testSmartFunctionUsesTheCallableSignature()
     {
         $fenom = $this->fenom();
-        $fenom->addFunction('greet', fn(string $name, string $greeting = 'Hello'): string
+        $fenom->addFunctionSmart('greet', fn(string $name, string $greeting = 'Hello'): string
             => "$greeting, $name!");
 
         $this->assertSame('Hello, World!', $fenom->compileCode('{greet name="World"}')->fetch(array()));
@@ -180,9 +178,27 @@ class FunctionsApiTest extends TestCase
     }
 
     /**
+     * addFunction() keeps its long-standing contract: the callback gets the raw
+     * ($params, $tpl, $var) triple. Consumers pass user-supplied callbacks straight
+     * through to it, so changing this default breaks third-party code silently.
+     */
+    public function testAddFunctionKeepsTheRawContract()
+    {
+        $fenom = $this->fenom();
+        $fenom->addFunction('probe', function ($params) {
+            return get_debug_type($params) . ':' . json_encode($params);
+        });
+
+        $this->assertSame(
+            'array:{"a":"b"}',
+            $fenom->compileCode('{probe a="b"}')->fetch(array())
+        );
+    }
+
+    /**
      * The old behaviour is still available, explicitly.
      */
-    public function testRawFuncParserStillAvailable()
+    public function testRawFuncParserCanBeRequestedExplicitly()
     {
         $fenom = $this->fenom();
         $fenom->addFunction('raw_probe', function ($params, $tpl) {

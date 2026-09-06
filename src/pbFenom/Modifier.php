@@ -85,8 +85,9 @@ class Modifier
      * @param string $format
      * @return string
      */
-    public static function date(string $date, string $format = "Y m d"): string
+    public static function date(?string $date, string $format = "Y m d"): string
     {
+        $date = (string) $date;
         if (is_numeric($date)) {
             $date = (int)$date;
         } else {
@@ -115,8 +116,12 @@ class Modifier
      * @return string
      * @throws \InvalidArgumentException on an unknown strategy
      */
-    public static function escape(string $text, string $type = 'html', ?string $charset = null): string
+    public static function escape(?string $text, string $type = 'html', ?string $charset = null): string
     {
+        // A template variable that is null or unset is ordinary, not an error: before
+        // upstream typed these signatures in 3.0.0 it simply escaped to "".
+        $text = (string) $text;
+
         switch (strtolower($type)) {
             case "url":
                 // RFC 3986: safe for path segments. Use 'query' for form-encoded values.
@@ -151,8 +156,9 @@ class Modifier
      * @param string $type
      * @return string
      */
-    public static function unescape(string $text, string $type = 'html'): string
+    public static function unescape(?string $text, string $type = 'html'): string
     {
+        $text = (string) $text;
         switch (strtolower($type)) {
             case "url":
                 return rawurldecode($text);
@@ -179,8 +185,9 @@ class Modifier
      * @param bool $middle
      * @return string
      */
-    public static function truncate(string $string, int $length = 80, string $etc = '...', bool $by_words = false, bool $middle = false): string
+    public static function truncate(?string $string, int $length = 80, string $etc = '...', bool $by_words = false, bool $middle = false): string
     {
+        $string = (string) $string;
         if ($middle) {
             if (preg_match('#^(.{' . $length . '}).*?(.{' . $length . '})?$#usS', $string, $match)) {
                 if (count($match) == 3) {
@@ -212,8 +219,9 @@ class Modifier
      * @param bool $to_line strip line ends
      * @return string
      */
-    public static function strip(string $str, bool $to_line = false): string
+    public static function strip(?string $str, bool $to_line = false): string
     {
+        $str = (string) $str;
         $str = trim($str);
         if ($to_line) {
             return preg_replace('#\s+#ms', ' ', $str);
@@ -275,8 +283,9 @@ class Modifier
      * @param string $replace The replacement value that replaces found search
      * @return string
      */
-    public static function replace(string $value, string $search, string $replace): string
+    public static function replace(?string $value, string $search, string $replace): string
     {
+        $value = (string) $value;
         return str_replace($search, $replace, $value);
     }
 
@@ -286,8 +295,9 @@ class Modifier
      * @param string $replacement
      * @return string
      */
-    public static function ereplace(string $value, string $pattern, string $replacement): string
+    public static function ereplace(?string $value, string $pattern, string $replacement): string
     {
+        $value = (string) $value;
         return preg_replace($pattern, $replacement, $value);
     }
 
@@ -296,8 +306,9 @@ class Modifier
      * @param string $pattern
      * @return bool
      */
-    public static function match(string $string, string $pattern): bool
+    public static function match(?string $string, string $pattern): bool
     {
+        $string = (string) $string;
         return fnmatch($pattern, $string);
     }
 
@@ -306,8 +317,9 @@ class Modifier
      * @param string $pattern
      * @return int
      */
-    public static function ematch(string $string, string $pattern): int
+    public static function ematch(?string $string, string $pattern): int
     {
+        $string = (string) $string;
         return preg_match($pattern, $string);
     }
 
