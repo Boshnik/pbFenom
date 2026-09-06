@@ -17,11 +17,28 @@ Compilers invokes during compilation template to PHP source and have to
 $fenom->addFunction(string $name, callable $callback [, callable $parser]);
 ```
 
-By default the tag's arguments are mapped onto the **callback's own signature** by
+The callback receives the tag's arguments as an array, together with the render context:
+
+```php
+$fenom->addFunction('greet', function (array $params, pbFenom\Render $tpl) {
+    return 'Hello, ' . ($params['name'] ?? $params[0] ?? 'world');
+});
+```
+```smarty
+{greet name="World"}
+{greet "World"}
+```
+
+This is the long-standing contract. Frameworks built on pbFenom pass user-supplied
+callbacks straight through to `addFunction()`, so it is deliberately left alone.
+
+### Mapping onto the callback's signature
+
+`addFunctionSmart()` matches the tag's arguments against the callback's parameters by
 reflection — named arguments by name, bare ones by position:
 
 ```php
-$fenom->addFunction('greet', function (string $name, string $greeting = 'Hello'): string {
+$fenom->addFunctionSmart('greet', function (string $name, string $greeting = 'Hello'): string {
     return "$greeting, $name!";
 });
 ```
@@ -31,42 +48,13 @@ $fenom->addFunction('greet', function (string $name, string $greeting = 'Hello')
 {greet "World"}                       {* positional *}
 ```
 
-So the parameter names are part of your template API: renaming one breaks templates.
-A missing required argument is reported at compile time.
+The parameter names become part of your template API: renaming one breaks templates,
+and a native function exposes PHP's own naming (`strtoupper` takes `$string`). A missing
+required argument is reported at compile time.
 
-`addFunctionSmart()` is a synonym of the above, kept because it was the only way to get
-this behaviour before 1.1.0.
-
-### The raw form
-
-To receive the arguments as an array instead, ask for it explicitly:
-
-```php
-$fenom->addFunction('some_function', function (array $params, pbFenom\Render $tpl) {
-    /* ... */
-}, pbFenom::RAW_FUNC_PARSER);
-```
-
-This was the default before 1.1.0, which is why writing a function used to feel harder
-than writing a modifier.
-
-### One callable, both ways
-
-Register it twice, under the same name:
-
-```php
-$excerpt = fn(string $text, int $words = 10): string => /* ... */;
-$fenom->addModifier('excerpt', $excerpt);
-$fenom->addFunction('excerpt', $excerpt);
-```
-```smarty
-{$post.body|excerpt:20}
-{excerpt text=$post.body words=20}
-```
-
-Two calls rather than one helper, deliberately: the second claims a **tag** name, and
-tag names collide. `escape` and `strip` are each both a built-in modifier and a built-in
-block tag, so a single call that quietly did both could overwrite `{strip}...{/strip}`.
+Any callable works — closures, array callables, invokable objects, `Class::method`
+strings, plain function names. Note that a closure cannot be named in generated code, so
+it is reached through the registry at runtime; a string callable is marginally faster.
 
 ### A parser of your own
 
@@ -78,6 +66,24 @@ $fenom->addFunction('some_function', $callback,
         /* return the PHP code for this tag */
     });
 ```
+
+### One callable, both ways
+
+Register it twice, under the same name:
+
+```php
+$excerpt = fn(string $text, int $words = 10): string => /* ... */;
+$fenom->addModifier('excerpt', $excerpt);
+$fenom->addFunctionSmart('excerpt', $excerpt);
+```
+```smarty
+{$post.body|excerpt:20}
+{excerpt text=$post.body words=20}
+```
+
+Two calls rather than one helper, deliberately: the second claims a **tag** name, and
+tag names collide. `escape` and `strip` are each both a built-in modifier and a built-in
+block tag, so a single call that quietly did both could overwrite `{strip}...{/strip}`.
 
 ## Block function
 

@@ -43,7 +43,7 @@ the normal case: editing chunks is not an administrator-only right.
 | `{"😀"\|length}` | 3 | 1 |
 | `strip` + non-UTF-8 template | the whole output is silently empty | text preserved |
 | `addFunctionSmart()` with a closure | TypeError — strings only | any callable |
-| `addFunction()` | callback gets `($params, $tpl, $var)` | the callable's signature is the template API |
+| `{$x\|escape}` when `$x` is null | TypeError — the 3.0.0 typing made an empty variable fatal | escapes to `""`, as before 3.0.0 |
 | `getModifier('x')` with one argument | TypeError on its own default | works |
 
 ## Performance
@@ -84,7 +84,6 @@ accessors, the BSD-3-Clause license.
 * the `pbFenom` namespace instead of `Fenom`;
 * `factory()` requires a compile directory — the `/tmp` default is gone;
 * `ENT_QUOTES` changes output: `'` becomes `&apos;`;
-* `addFunction()` reads the callable's signature by default;
 * the cache format changed — clear the compile directory once.
 
 **Inherited from upstream 3.0.0**, not introduced here: `ProviderInterface` is typed (so

@@ -14,11 +14,28 @@
 $fenom->addFunction(string $name, callable $callback [, callable $parser]);
 ```
 
-По умолчанию аргументы тега раскладываются на **сигнатуру самого колбэка** через
-рефлексию: именованные — по имени, остальные — по позиции.
+Колбэк получает аргументы тега массивом вместе с контекстом рендера:
 
 ```php
-$fenom->addFunction('greet', function (string $name, string $greeting = 'Привет'): string {
+$fenom->addFunction('greet', function (array $params, pbFenom\Render $tpl) {
+    return 'Привет, ' . ($params['name'] ?? $params[0] ?? 'мир');
+});
+```
+```smarty
+{greet name="Мир"}
+{greet "Мир"}
+```
+
+Это давний контракт. Фреймворки поверх pbFenom пробрасывают в `addFunction()`
+пользовательские колбэки как есть, поэтому он намеренно оставлен без изменений.
+
+### Раскладка на сигнатуру колбэка
+
+`addFunctionSmart()` сопоставляет аргументы тега с параметрами колбэка через рефлексию:
+именованные — по имени, остальные — по позиции.
+
+```php
+$fenom->addFunctionSmart('greet', function (string $name, string $greeting = 'Привет'): string {
     return "$greeting, $name!";
 });
 ```
@@ -28,24 +45,22 @@ $fenom->addFunction('greet', function (string $name, string $greeting = 'При�
 {greet "Мир"}                            {* позиционно *}
 ```
 
-Имена параметров становятся частью API шаблона: переименование параметра ломает
-шаблоны. Пропущенный обязательный аргумент сообщается на этапе компиляции.
+Имена параметров становятся частью API шаблона: переименование ломает шаблоны, а у
+нативной функции всплывает родное PHP-именование (`strtoupper` принимает `$string`).
+Пропущенный обязательный аргумент сообщается на этапе компиляции.
 
-`addFunctionSmart()` — синоним; оставлен потому, что до 1.1.0 это был единственный
-способ получить такое поведение.
+Принимается любой callable — замыкание, массив, объект с `__invoke`, строка
+`Class::method`, имя функции. Замыкание нельзя вписать в скомпилированный шаблон,
+поэтому оно достаётся через реестр в рантайме; строковый callable чуть быстрее.
 
-### Сырая форма
-
-Чтобы получить аргументы массивом, попросите об этом явно:
+### Собственный парсер
 
 ```php
-$fenom->addFunction('some_function', function (array $params, pbFenom\Render $tpl) {
-    /* ... */
-}, pbFenom::RAW_FUNC_PARSER);
+$fenom->addFunction('some_function', $callback,
+    function (pbFenom\Tokenizer $tokenizer, pbFenom\Tag $tag) {
+        /* вернуть PHP-код тега */
+    });
 ```
-
-До 1.1.0 это было поведением по умолчанию — именно поэтому написать функцию было
-сложнее, чем модификатор.
 
 ### Один колбэк, обе формы вызова
 
@@ -54,7 +69,7 @@ $fenom->addFunction('some_function', function (array $params, pbFenom\Render $tp
 ```php
 $excerpt = fn(string $text, int $words = 10): string => /* ... */;
 $fenom->addModifier('excerpt', $excerpt);
-$fenom->addFunction('excerpt', $excerpt);
+$fenom->addFunctionSmart('excerpt', $excerpt);
 ```
 ```smarty
 {$post.body|excerpt:20}
@@ -65,15 +80,6 @@ $fenom->addFunction('excerpt', $excerpt);
 тегов конфликтуют. `escape` и `strip` являются одновременно встроенным модификатором и
 встроенным блочным тегом, поэтому один вызов, делающий и то и другое молча, мог бы
 перезаписать `{strip}...{/strip}`.
-
-### Собственный парсер
-
-```php
-$fenom->addFunction('some_function', $callback,
-    function (pbFenom\Tokenizer $tokenizer, pbFenom\Tag $tag) {
-        /* вернуть PHP-код тега */
-    });
-```
 
 ## Блоковые функции
 

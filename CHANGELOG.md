@@ -11,13 +11,17 @@ Changed
   `compileCode()` — now `include` from a private stream wrapper instead. That needs no
   `allow_url_include`, measured the same as `eval()`, and makes runtime errors name the
   template rather than reporting `eval()'d code on line N`.
-- `addFunction()` now maps the tag's arguments onto the **callback's own signature** by
-  default, which is what everyone expects; it used to hand the callback
-  `($params, $tpl, $var)`, so writing a function was needlessly harder than writing a
-  modifier. The old behaviour is available as `pbFenom::RAW_FUNC_PARSER`, passed
-  explicitly. Callbacks written for the old default now fail loudly at compile time
-  ("Function X requires the 'params' argument") rather than misbehaving quietly.
-  `addFunctionSmart()` is unchanged and is now a synonym of the default.
+- Modifiers accept `null` again. Upstream typed these signatures in 3.0.0, which turned
+  an ordinary null template variable into a fatal on `{$x|escape}` — while plain `{$x}`
+  kept working, since `htmlspecialchars(null)` merely warns. `escape`, `unescape`,
+  `truncate`, `strip`, `replace`, `ereplace`, `match`, `ematch` and `date` treat null as
+  `""`, the way they did before 3.0.0.
+- `addFunction()` keeps its long-standing contract: the callback receives
+  `($params, $tpl, $var)`. An earlier revision of this release changed the default to
+  the smart parser, which broke every function registered the usual way — including
+  user-supplied callbacks that frameworks built on the engine pass straight through.
+  Use `addFunctionSmart()`, now fixed to accept any callable, when you want the
+  callable's signature to be the template API.
 
 Fixed
 
@@ -35,7 +39,7 @@ Fixed
 Note
 
 - To make one callable usable both ways, register it twice — `addModifier()` and
-  `addFunction()` with the same name. This stays two explicit calls on purpose: the
+  `addFunctionSmart()` with the same name. This stays two explicit calls on purpose: the
   second one claims a **tag** name, and tag names collide (`escape` and `strip` are
   both a built-in modifier and a built-in block tag), so hiding it behind one call
   would let `{strip}...{/strip}` be overwritten without a word.
